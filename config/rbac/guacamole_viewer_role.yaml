@@ -1,0 +1,27 @@
+# permissions for end users to view guacamoles.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: guacamole-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: guacamole-operator
+    app.kubernetes.io/part-of: guacamole-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: guacamole-viewer-role
+rules:
+- apiGroups:
+  - guacamole-operator.github.io
+  resources:
+  - guacamoles
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - guacamole-operator.github.io
+  resources:
+  - guacamoles/status
+  verbs:
+  - get

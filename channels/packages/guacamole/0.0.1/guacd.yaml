@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guacd
+  labels:
+    app.kubernetes.io/name: guacd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: guacd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: guacd
+    spec:
+      serviceAccountName: guacamole
+      containers:
+        - name: guacd
+          image: docker.io/guacamole/guacd:latest
+          ports:
+            - name: guacd
+              containerPort: 4822
+              protocol: TCP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guacd
+  labels:
+    app.kubernetes.io/name: guacd
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4822
+      targetPort: guacd
+      protocol: TCP
+      name: guacd
+  selector:
+    app.kubernetes.io/name: guacd

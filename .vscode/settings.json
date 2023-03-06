@@ -1,0 +1,19 @@
+{
+  "editor.formatOnSave": true,
+  "[markdown]": {
+    "editor.formatOnSave": true
+  },
+  "editor.codeActionsOnSave": {
+    "source.fixAll.markdownlint": true
+  },
+  "[go]": {
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": true
+    },
+  },
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": [
+    "--fix"
+  ],
+  "go.lintOnSave": "workspace",
+}
