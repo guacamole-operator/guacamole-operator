@@ -1,0 +1,11 @@
+name: golangci-lint
+on:
+  pull_request:
+    paths-ignore:
+      - "**.go"
+jobs:
+  golangci:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No linting required"

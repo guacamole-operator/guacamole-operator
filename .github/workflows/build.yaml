@@ -1,0 +1,133 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**.go"
+      - go.mod
+      - go.sum
+      - Containerfile
+      - config/**
+  workflow_dispatch:
+
+env:
+  OPERATOR_NAME: guacamole-operator
+  OPERATOR_IMAGE_NAME: guacamole-operator
+  OPERATOR_BUNDLE_IMAGE_NAME: guacamole-operator-bundle
+  IMAGE_REGISTRY: ghcr.io/${{ github.repository_owner }}
+  REGISTRY_USER: ${{ github.actor }}
+  REGISTRY_PASSWORD: ${{ github.token }}
+
+jobs:
+  test:
+    name: Run go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make test
+
+  version:
+    name: Generate SemVer
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code with git history
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Generate basic SemVer inputs
+        id: semver
+        uses: PaulHatch/semantic-version@v5.0.0-alpha2
+        with:
+          version_format: "${major}.${minor}.${patch}"
+
+      - name: Generate additional vars
+        id: vars
+        run: |
+          echo ::set-output name=timestamp::$(git log -1 --date=format:%Y%m%d%H%M%S --format=%cd)
+          echo ::set-output name=git_sha_short::$(git rev-parse --short HEAD)
+
+      - name: Generate final SemVer
+        id: version
+        run: |
+          semver=${{ steps.semver.outputs.version }}
+          timestamp=${{ steps.vars.outputs.timestamp }}
+          sha=${{ steps.vars.outputs.git_sha_short }}
+          version=${semver}-${timestamp}-${sha}
+          echo ::set-output name=version::${version}
+
+  container:
+    name: Build operator image
+    runs-on: ubuntu-latest
+    needs: [test, version]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build image
+        uses: redhat-actions/buildah-build@v2
+        id: build
+        with:
+          image: ${{ env.OPERATOR_IMAGE_NAME }}
+          tags: ${{ needs.version.outputs.version }}
+          containerfiles: |
+            ./Containerfile
+
+      - name: Push to GHCR
+        uses: redhat-actions/push-to-registry@v2
+        id: push
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+
+      - name: Print push output
+        run: echo "${{ toJSON(steps.push.outputs) }}"
+
+  bundle:
+    name: Build operator bundle image
+    runs-on: ubuntu-latest
+    needs: [container, version]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Generate bundle
+        run: |
+          version=${{ needs.version.outputs.version }}
+          image=${{ env.OPERATOR_IMAGE_NAME }}:${version}
+          registry=${{ env.IMAGE_REGISTRY }}
+
+          make bundle IMG=${registry}/${image} VERSION=${version}
+
+      - name: Build bundle image
+        uses: redhat-actions/buildah-build@v2
+        id: build
+        with:
+          image: ${{ env.OPERATOR_BUNDLE_IMAGE_NAME }}
+          tags: ${{ needs.version.outputs.version }}
+          containerfiles: |
+            ./bundle.Dockerfile
+
+      - name: Push to GHCR
+        uses: redhat-actions/push-to-registry@v2
+        id: push
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.IMAGE_REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ env.REGISTRY_PASSWORD }}
+
+      - name: Print push output
+        run: echo "${{ toJSON(steps.push.outputs) }}"
