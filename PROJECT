@@ -1,10 +1,24 @@
 componentConfig: true
 domain: guacamole-operator.github.io
 layout:
-- go.kubebuilder.io/v3
+  - go.kubebuilder.io/v3
 plugins:
+  declarative.go.kubebuilder.io/v1:
+    resources:
+      - domain: guacamole-operator.github.io
+        kind: Guacamole
+        version: v1alpha1
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: guacamole-operator
-repo: github.com/guacamole-operator/operator
+repo: github.com/guacamole-operator/guacamole-operator
+resources:
+  - api:
+      crdVersion: v1
+      namespaced: true
+    controller: true
+    domain: guacamole-operator.github.io
+    kind: Guacamole
+    path: github.com/guacamole-operator/guacamole-operator/api/v1alpha1
+    version: v1alpha1
 version: "3"

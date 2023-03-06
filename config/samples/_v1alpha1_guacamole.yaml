@@ -1,0 +1,12 @@
+apiVersion: guacamole-operator.github.io/v1alpha1
+kind: Guacamole
+metadata:
+  labels:
+    app.kubernetes.io/name: guacamole
+    app.kubernetes.io/instance: guacamole-sample
+    app.kubernetes.io/part-of: guacamole-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: guacamole-operator
+  name: guacamole-sample
+spec:
+  # TODO(user): Add fields here
