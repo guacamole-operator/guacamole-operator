@@ -1,0 +1,48 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: guacamole-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Guacamole is the Schema for the guacamoles API.
+      displayName: Guacamole
+      kind: Guacamole
+      name: guacamoles.guacamole-operator.github.io
+      version: v1alpha1
+  description: A Kubernetes operator to manage Apache Guacamole.
+  displayName: Guacamole Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - guacamole
+  - vm
+  links:
+  - name: Guacamole Operator
+    url: https://guacamole-operator.domain
+  maintainers:
+  - email: 5973515+mpreu@users.noreply.github.com
+    name: Matthias Preu
+  maturity: alpha
+  provider:
+    name: Matthias Preu
+  version: 0.0.0
