@@ -5,6 +5,7 @@ resources:
   - guacamole.yaml
   - guacd.yaml
   - sa.yaml
+  - secret.yaml
 
 images:
   - name: docker.io/guacamole/guacd:latest

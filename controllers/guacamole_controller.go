@@ -58,7 +58,7 @@ func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	watchLabels := declarative.SourceLabel(mgr.GetScheme())
 
 	if err := r.Reconciler.Init(mgr, &guacamolev1alpha1.Guacamole{},
-		declarative.WithObjectTransform(transformer.Guacamole),
+		declarative.WithObjectTransform(transformer.Guacamole()),
 		declarative.WithObjectTransform(declarative.AddLabels(labels)),
 		declarative.WithOwner(declarative.SourceAsOwner),
 		declarative.WithLabels(watchLabels),
