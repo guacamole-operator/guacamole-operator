@@ -15,6 +15,7 @@ RUN go mod download
 COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
+COPY internal/ internal/
 # https://github.com/kubernetes-sigs/kubebuilder-declarative-pattern/blob/master/docs/addon/walkthrough/README.md#adding-a-manifest
 # Stage channels and make readable
 COPY channels/ /channels/
