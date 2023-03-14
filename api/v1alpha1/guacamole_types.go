@@ -21,13 +21,23 @@ import (
 	addonv1alpha1 "sigs.k8s.io/kubebuilder-declarative-pattern/pkg/patterns/addon/pkg/apis/v1alpha1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // GuacamoleSpec defines the desired state of Guacamole.
 type GuacamoleSpec struct {
 	addonv1alpha1.CommonSpec `json:",inline"`
 	addonv1alpha1.PatchSpec  `json:",inline"`
+
+	// Authentication method configuration (required).
+	Auth Auth `json:"auth,omitempty"`
+
+	// Additional TLS settings.
+	// +optional
+	TLS *TLS `json:"tls,omitempty"`
+
+	// Additional settings.
+	// +optional
+	AdditionalSettings map[string]string `json:"additionalSettings,omitempty"`
 
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file

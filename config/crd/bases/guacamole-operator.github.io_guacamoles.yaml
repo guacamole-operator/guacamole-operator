@@ -35,6 +35,89 @@ spec:
           spec:
             description: GuacamoleSpec defines the desired state of Guacamole.
             properties:
+              additionalSettings:
+                additionalProperties:
+                  type: string
+                description: Additional settings.
+                type: object
+              auth:
+                description: Authentication method configuration (required).
+                properties:
+                  oidc:
+                    description: OIDC authentication.
+                    properties:
+                      params:
+                        items:
+                          description: Parameter for an authentication method.
+                          properties:
+                            name:
+                              type: string
+                            valueFrom:
+                              description: SecretKeySelector selects a key of a Secret.
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    TODO: Add other useful fields. apiVersion, kind,
+                                    uid?'
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          required:
+                          - name
+                          - valueFrom
+                          type: object
+                        type: array
+                    required:
+                    - params
+                    type: object
+                  postgres:
+                    description: Postgres authentication.
+                    properties:
+                      params:
+                        items:
+                          description: Parameter for an authentication method.
+                          properties:
+                            name:
+                              type: string
+                            valueFrom:
+                              description: SecretKeySelector selects a key of a Secret.
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    TODO: Add other useful fields. apiVersion, kind,
+                                    uid?'
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                          required:
+                          - name
+                          - valueFrom
+                          type: object
+                        type: array
+                    required:
+                    - params
+                    type: object
+                type: object
               channel:
                 description: 'Channel specifies a channel that can be used to resolve
                   a specific addon, eg: stable It will be ignored if Version is specified'
@@ -44,6 +127,24 @@ spec:
                   type: object
                   x-kubernetes-preserve-unknown-fields: true
                 type: array
+              tls:
+                description: Additional TLS settings.
+                properties:
+                  caCertificates:
+                    properties:
+                      secretRef:
+                        description: LocalObjectReference contains enough information
+                          to let you locate the referenced object inside the same
+                          namespace.
+                        properties:
+                          name:
+                            description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              TODO: Add other useful fields. apiVersion, kind, uid?'
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                    type: object
+                type: object
               version:
                 description: Version specifies the exact addon version to be deployed,
                   eg 1.2.3 It should not be specified if Channel is specified

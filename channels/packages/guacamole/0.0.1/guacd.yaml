@@ -22,7 +22,6 @@ spec:
             - name: guacd
               containerPort: 4822
               protocol: TCP
-
 ---
 apiVersion: v1
 kind: Service

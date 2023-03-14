@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/kubebuilder-declarative-pattern/pkg/patterns/declarative"
 
 	guacamolev1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
+	"github.com/guacamole-operator/guacamole-operator/internal/transformer"
 )
 
 var _ reconcile.Reconciler = &GuacamoleReconciler{}
@@ -57,12 +58,11 @@ func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	watchLabels := declarative.SourceLabel(mgr.GetScheme())
 
 	if err := r.Reconciler.Init(mgr, &guacamolev1alpha1.Guacamole{},
+		declarative.WithObjectTransform(transformer.Guacamole),
 		declarative.WithObjectTransform(declarative.AddLabels(labels)),
 		declarative.WithOwner(declarative.SourceAsOwner),
 		declarative.WithLabels(watchLabels),
 		declarative.WithStatus(status.NewBasic(mgr.GetClient())),
-		// TODO: add an application to your manifest:  declarative.WithObjectTransform(addon.TransformApplicationFromStatus),
-		// TODO: add an application to your manifest:  declarative.WithManagedApplication(watchLabels),
 		declarative.WithObjectTransform(addon.ApplyPatches),
 		declarative.WithApplyKustomize(),
 	); err != nil {
