@@ -9,4 +9,55 @@ metadata:
     app.kubernetes.io/created-by: guacamole-operator
   name: guacamole-sample
 spec:
-  # TODO(user): Add fields here
+  channel: dev
+  auth:
+    oidc:
+      params:
+        - name: OPENID_AUTHORIZATION_ENDPOINT
+          valueFrom:
+            name: guacamole-oidc
+            key: authorization-endpoint
+        - name: OPENID_JWKS_ENDPOINT
+          valueFrom:
+            name: guacamole-oidc
+            key: jwks-endpoint
+        - name: OPENID_ISSUER
+          valueFrom:
+            name: guacamole-oidc
+            key: issuer
+        - name: OPENID_CLIENT_ID
+          valueFrom:
+            name: guacamole-oidc
+            key: clientID
+        - name: OPENID_REDIRECT_URI
+          valueFrom:
+            name: guacamole-oidc
+            key: redirect-uri
+    postgres:
+      params:
+        - name: POSTGRES_HOSTNAME
+          valueFrom:
+            name: guacamoledb-pguser-guacamoledb
+            key: host
+        - name: POSTGRES_PORT
+          valueFrom:
+            name: guacamoledb-pguser-guacamoledb
+            key: port
+        - name: POSTGRES_DATABASE
+          valueFrom:
+            name: guacamoledb-pguser-guacamoledb
+            key: dbname
+        - name: POSTGRES_USER
+          valueFrom:
+            name: guacamoledb-pguser-guacamoledb
+            key: user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            name: guacamoledb-pguser-guacamoledb
+            key: password
+  tls:
+    caCertificates:
+      secretRef:
+        name: guacamole-ca-certs
+  additionalSettings:
+    extension-priority: "*, openid"
