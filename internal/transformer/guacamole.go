@@ -18,34 +18,39 @@ import (
 const GuacamoleDeploymentName = "guacamole"
 
 // Guacamole transform the guacamole deployment manifest.
-func Guacamole(ctx context.Context, obj declarative.DeclarativeObject, m *manifest.Objects) error {
-	guac := obj.(*v1alpha1.Guacamole)
+func Guacamole() declarative.ObjectTransform {
+	return func(ctx context.Context, obj declarative.DeclarativeObject, m *manifest.Objects) error {
+		guac := obj.(*v1alpha1.Guacamole)
 
-	if guac.Spec.TLS != nil {
-		if err := applyTLSConfiguration(guac.Spec.TLS, m); err != nil {
-			return err
+		if guac.Spec.TLS != nil {
+			if err := applyTLSConfiguration(guac.Spec.TLS, m); err != nil {
+				return err
+			}
 		}
-	}
 
-	if guac.Spec.Auth.Postgres != nil {
-		if err := applyPostgresConfiguration(guac, m); err != nil {
-			return err
+		if guac.Spec.Auth.Postgres != nil {
+			if err := applyPostgresConfiguration(guac, m); err != nil {
+				return err
+			}
 		}
-	}
 
-	if guac.Spec.Auth.OIDC != nil {
-		if err := applyOIDCConfiguration(guac, m); err != nil {
-			return err
+		if guac.Spec.Auth.OIDC != nil {
+			if err := applyOIDCConfiguration(guac, m); err != nil {
+				return err
+			}
 		}
-	}
 
-	if guac.Spec.AdditionalSettings != nil {
-		if err := applyAdditionalSettings(guac.Spec.AdditionalSettings, m); err != nil {
-			return err
+		if guac.Spec.AdditionalSettings != nil {
+			if err := applyAdditionalSettings(guac.Spec.AdditionalSettings, m); err != nil {
+				return err
+			}
 		}
-	}
 
-	return nil
+		// Modify secret for guacamole access parameters.
+		err := updateAccessSecret(guac.Namespace, m)
+
+		return err
+	}
 }
 
 func applyTLSConfiguration(tls *v1alpha1.TLS, m *manifest.Objects) error {
@@ -229,6 +234,39 @@ func applyAdditionalSettings(values map[string]string, m *manifest.Objects) erro
 			)
 
 			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&deployment)
+			if err != nil {
+				return err
+			}
+
+			obj, err := manifest.NewObject(&unstructured.Unstructured{Object: u})
+			if err != nil {
+				return err
+			}
+
+			m.Items[idx] = obj
+
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func updateAccessSecret(ns string, m *manifest.Objects) error {
+	const guacamoleCredentialsSecret = "guacamole-credentials"
+	const guacamoleInitialPassword = "guacadmin"
+
+	for idx, item := range m.Items {
+		if isSecret(item) && item.GetName() == guacamoleCredentialsSecret {
+			var secret corev1.Secret
+			err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.UnstructuredObject().Object, &secret)
+			if err != nil {
+				return fmt.Errorf("error converting secret from unstructured: %w", err)
+			}
+			secret.StringData["server"] = fmt.Sprintf("http://guacamole.%s:80/guacamole/api", ns)
+			secret.StringData["password"] = guacamoleInitialPassword
+
+			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&secret)
 			if err != nil {
 				return err
 			}
