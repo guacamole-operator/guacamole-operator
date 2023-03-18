@@ -15,32 +15,48 @@ spec:
         app.kubernetes.io/name: guacamole
     spec:
       serviceAccountName: guacamole
-      initContainers:
-        - name: create-init-db
-          image: docker.io/guacamole/guacamole:latest
-          volumeMounts:
-            - name: initdb
-              mountPath: /data
-          command: ["/bin/sh"]
-          args:
-            - -c
-            - |
-              /opt/guacamole/bin/initdb.sh --postgres > /data/initdb.sql
-        - name: loaddb
-          image: docker.io/library/postgres:alpine
-          volumeMounts:
-            - name: initdb
-              mountPath: /data
-          command: ["/bin/sh"]
-          args:
-            - -c
-            - |
-              export PGPASSWORD=$POSTGRES_PASSWORD
-              # most likely already created, so don't fail, just log and move on
-              psql -h $POSTGRES_HOSTNAME -d $POSTGRES_DATABASE -U $POSTGRES_USER -p $POSTGRES_PORT -a -w -f /data/initdb.sql || true
       containers:
         - name: guacamole
           image: docker.io/guacamole/guacamole:latest
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - |
+              set -e
+
+              # Import ca-certs.
+              if [ -d "/opt/ca-bundle" ]; then
+                echo "Importing ca-certificates."
+
+                CERTFILES=$(find /opt/ca-bundle -mindepth 1 -maxdepth 1 -name '*.pem')
+
+                for CERTFILE in $CERTFILES; do
+                    # Remove path, then suffix to derive alias from filename
+                    ALIAS=${CERTFILE##*/}
+                    ALIAS=${ALIAS%.*}
+                    $JAVA_HOME/bin/keytool \
+                      -importcert \
+                      -file "$CERTFILE" \
+                      -alias "$ALIAS" \
+                      -trustcacerts \
+                      -storepass changeit \
+                      -noprompt
+
+                    if [ $? -ne 0 ]; then
+                        echo "Failed to add $CERTFILE as $ALIAS to keystore"
+                        exit 1
+                    fi
+
+                    # Use user keystore, as system keystore is not writable in the used container.
+                    # Disadvantage is, that regular public CAs are not used anymore.
+                    export JAVA_OPTS="$JAVA_OPTS -Djavax.net.ssl.trustStore=$HOME/.keystore"
+                    export JAVA_OPTS="$JAVA_OPTS -Djavax.net.ssl.trustStorePassword=changeit"
+                done
+              fi
+
+              # Run original entrypoint.
+              /opt/guacamole/bin/start.sh
           env:
             - name: GUACD_HOSTNAME
               value: guacd
@@ -48,18 +64,14 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
-          # livenessProbe:
-          #   httpGet:
-          #     path: /
-          #     port: http
-          # readinessProbe:
-          #   httpGet:
-          #     path: /
-          #     port: http
-      volumes:
-        - name: initdb
-          emptyDir: {}
-
+          livenessProbe:
+            httpGet:
+              path: /guacamole
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /guacamole
+              port: http
 ---
 apiVersion: v1
 kind: Service
