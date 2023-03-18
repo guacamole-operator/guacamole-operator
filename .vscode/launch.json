@@ -9,7 +9,10 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}"
+      "program": "${workspaceFolder}",
+      "env": {
+        "WATCH_NAMESPACE": ""
+      }
     }
   ]
 }

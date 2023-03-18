@@ -12,10 +12,19 @@ import (
 // Client for the Guacamole API.
 type Client struct {
 	*gen.ClientWithResponses
-	source string
+	Source string
 }
 
-type LoginClient struct {
+// Config for client instantiation.
+type Config struct {
+	Server   string
+	Username string
+	Password string
+	Insecure bool
+	Source   string
+}
+
+type loginClient struct {
 	*gen.ClientWithResponses
 	username string
 	password string
@@ -23,40 +32,40 @@ type LoginClient struct {
 }
 
 // New instantiates a client.
-func New(server string, username string, password string, insecure bool, source string) (*Client, error) {
+func New(config *Config) (*Client, error) {
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: insecure,
+				InsecureSkipVerify: config.Insecure,
 			},
 		},
 	}
 
-	cl, err := gen.NewClientWithResponses(server, gen.WithHTTPClient(httpClient))
+	cl, err := gen.NewClientWithResponses(config.Server, gen.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, err
 	}
 
-	loginClient := LoginClient{
+	loginClient := loginClient{
 		ClientWithResponses: cl,
-		username:            username,
-		password:            password,
+		username:            config.Username,
+		password:            config.Password,
 	}
 
-	c, err := gen.NewClientWithResponses(server, gen.WithHTTPClient(httpClient), gen.WithRequestEditorFn(authenticate(loginClient)))
+	c, err := gen.NewClientWithResponses(config.Server, gen.WithHTTPClient(httpClient), gen.WithRequestEditorFn(authenticate(loginClient)))
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
 		ClientWithResponses: c,
-		source:              source,
+		Source:              config.Source,
 	}, nil
 }
 
 // authenticate is a request mutation function adding the Guacamole
 // credentials to a request. It will renew the token if required.
-func authenticate(client LoginClient) gen.RequestEditorFn {
+func authenticate(client loginClient) gen.RequestEditorFn {
 	const guacamoleToken string = "Guacamole-Token"
 
 	return func(ctx context.Context, req *http.Request) error {
