@@ -15,7 +15,11 @@ spec:
     singular: connection
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.protocol
+      name: Protocol
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Connection is the Schema for the connections API.
