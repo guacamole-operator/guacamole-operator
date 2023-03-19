@@ -55,8 +55,9 @@ type ConnectionStatus struct {
 	Parent *string `json:"parent,omitempty"`
 }
 
-//+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Protocol",type=string,JSONPath=`.spec.protocol`
 
 // Connection is the Schema for the connections API.
 type Connection struct {
@@ -67,7 +68,7 @@ type Connection struct {
 	Status ConnectionStatus `json:"status,omitempty"`
 }
 
-//+kubebuilder:object:root=true
+// +kubebuilder:object:root=true
 
 // ConnectionList contains a list of Connection.
 type ConnectionList struct {
