@@ -10,9 +10,7 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "env": {
-        "WATCH_NAMESPACE": ""
-      }
+      "envFile": "${fileDirname}/.env"
     }
   ]
 }

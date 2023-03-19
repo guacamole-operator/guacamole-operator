@@ -28,9 +28,11 @@ type ConnectionSpec struct {
 	// Protocol of the connection.
 	Protocol ConnectionProtocol `json:"protocol,omitempty"`
 
-	// Parent of the connection. Defaults to ROOT if not specified.
+	// Parent of the connection specified as a path (/<group>/<group>).
+	// Defaults to ROOT if not specified.
+	//
 	// +optional
-	// +kubebuilder:default=ROOT
+	// +kubebuilder:default=/
 	Parent *string `json:"parent,omitempty"`
 
 	// Parameter of the connection
@@ -42,8 +44,15 @@ type ConnectionSpec struct {
 type ConnectionStatus struct {
 	// Guacamole internal identifier of the connection.
 	// Missing if connection not yet configured.
+	//
 	// +optional
 	Identifier *string `json:"identifier,omitempty"`
+
+	// Guacamole internal identifier of the connection's parent group.
+	// Missing if connection not yet configured.
+	//
+	// +optional
+	Parent *string `json:"parent,omitempty"`
 }
 
 //+kubebuilder:object:root=true
