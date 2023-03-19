@@ -8,6 +8,32 @@ rules:
 - apiGroups:
   - guacamole-operator.github.io
   resources:
+  - connections
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - guacamole-operator.github.io
+  resources:
+  - connections/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - guacamole-operator.github.io
+  resources:
+  - connections/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - guacamole-operator.github.io
+  resources:
   - guacamoles
   verbs:
   - create

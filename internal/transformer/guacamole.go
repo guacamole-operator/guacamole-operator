@@ -47,7 +47,7 @@ func Guacamole() declarative.ObjectTransform {
 		}
 
 		// Modify secret for guacamole access parameters.
-		err := updateAccessSecret(guac.Namespace, m)
+		err := updateAccessSecret(m, guac)
 
 		return err
 	}
@@ -252,7 +252,7 @@ func applyAdditionalSettings(values map[string]string, m *manifest.Objects) erro
 	return nil
 }
 
-func updateAccessSecret(ns string, m *manifest.Objects) error {
+func updateAccessSecret(m *manifest.Objects, guac *v1alpha1.Guacamole) error {
 	const guacamoleCredentialsSecret = "guacamole-credentials"
 	const guacamoleInitialPassword = "guacadmin"
 
@@ -263,8 +263,12 @@ func updateAccessSecret(ns string, m *manifest.Objects) error {
 			if err != nil {
 				return fmt.Errorf("error converting secret from unstructured: %w", err)
 			}
-			secret.StringData["server"] = fmt.Sprintf("http://guacamole.%s:80/guacamole/api", ns)
+			secret.StringData["server"] = fmt.Sprintf("http://guacamole.%s:80/guacamole/api", guac.Namespace)
 			secret.StringData["password"] = guacamoleInitialPassword
+
+			if guac.Spec.Auth.Postgres != nil {
+				secret.StringData["source"] = "postgresql"
+			}
 
 			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&secret)
 			if err != nil {

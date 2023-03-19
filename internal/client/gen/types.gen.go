@@ -503,10 +503,7 @@ type ConnectionGroupTreeType string
 type ConnectionGroups map[string]ConnectionGroup
 
 // ConnectionParameters defines model for ConnectionParameters.
-type ConnectionParameters = []ConnectionParameters_Item
-
-// ConnectionParameters_Item defines model for ConnectionParameters.Item.
-type ConnectionParameters_Item struct {
+type ConnectionParameters struct {
 	union json.RawMessage
 }
 
@@ -999,22 +996,22 @@ type ModifyUserGroupsOfUserJSONRequestBody = PatchRequest
 // CreateOrValidateTokenFormdataRequestBody defines body for CreateOrValidateToken for application/x-www-form-urlencoded ContentType.
 type CreateOrValidateTokenFormdataRequestBody = TokenRequest
 
-// AsConnectionParametersVNC returns the union data inside the ConnectionParameters_Item as a ConnectionParametersVNC
-func (t ConnectionParameters_Item) AsConnectionParametersVNC() (ConnectionParametersVNC, error) {
+// AsConnectionParametersVNC returns the union data inside the ConnectionParameters as a ConnectionParametersVNC
+func (t ConnectionParameters) AsConnectionParametersVNC() (ConnectionParametersVNC, error) {
 	var body ConnectionParametersVNC
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromConnectionParametersVNC overwrites any union data inside the ConnectionParameters_Item as the provided ConnectionParametersVNC
-func (t *ConnectionParameters_Item) FromConnectionParametersVNC(v ConnectionParametersVNC) error {
+// FromConnectionParametersVNC overwrites any union data inside the ConnectionParameters as the provided ConnectionParametersVNC
+func (t *ConnectionParameters) FromConnectionParametersVNC(v ConnectionParametersVNC) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeConnectionParametersVNC performs a merge with any union data inside the ConnectionParameters_Item, using the provided ConnectionParametersVNC
-func (t *ConnectionParameters_Item) MergeConnectionParametersVNC(v ConnectionParametersVNC) error {
+// MergeConnectionParametersVNC performs a merge with any union data inside the ConnectionParameters, using the provided ConnectionParametersVNC
+func (t *ConnectionParameters) MergeConnectionParametersVNC(v ConnectionParametersVNC) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -1025,22 +1022,22 @@ func (t *ConnectionParameters_Item) MergeConnectionParametersVNC(v ConnectionPar
 	return err
 }
 
-// AsConnectionParametersRDP returns the union data inside the ConnectionParameters_Item as a ConnectionParametersRDP
-func (t ConnectionParameters_Item) AsConnectionParametersRDP() (ConnectionParametersRDP, error) {
+// AsConnectionParametersRDP returns the union data inside the ConnectionParameters as a ConnectionParametersRDP
+func (t ConnectionParameters) AsConnectionParametersRDP() (ConnectionParametersRDP, error) {
 	var body ConnectionParametersRDP
 	err := json.Unmarshal(t.union, &body)
 	return body, err
 }
 
-// FromConnectionParametersRDP overwrites any union data inside the ConnectionParameters_Item as the provided ConnectionParametersRDP
-func (t *ConnectionParameters_Item) FromConnectionParametersRDP(v ConnectionParametersRDP) error {
+// FromConnectionParametersRDP overwrites any union data inside the ConnectionParameters as the provided ConnectionParametersRDP
+func (t *ConnectionParameters) FromConnectionParametersRDP(v ConnectionParametersRDP) error {
 	b, err := json.Marshal(v)
 	t.union = b
 	return err
 }
 
-// MergeConnectionParametersRDP performs a merge with any union data inside the ConnectionParameters_Item, using the provided ConnectionParametersRDP
-func (t *ConnectionParameters_Item) MergeConnectionParametersRDP(v ConnectionParametersRDP) error {
+// MergeConnectionParametersRDP performs a merge with any union data inside the ConnectionParameters, using the provided ConnectionParametersRDP
+func (t *ConnectionParameters) MergeConnectionParametersRDP(v ConnectionParametersRDP) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -1051,12 +1048,12 @@ func (t *ConnectionParameters_Item) MergeConnectionParametersRDP(v ConnectionPar
 	return err
 }
 
-func (t ConnectionParameters_Item) MarshalJSON() ([]byte, error) {
+func (t ConnectionParameters) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
 }
 
-func (t *ConnectionParameters_Item) UnmarshalJSON(b []byte) error {
+func (t *ConnectionParameters) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
