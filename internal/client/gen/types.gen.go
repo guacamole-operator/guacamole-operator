@@ -465,10 +465,11 @@ type ConnectionGroup struct {
 		MaxConnections        *string                                         `json:"max-connections"`
 		MaxConnectionsPerUser *string                                         `json:"max-connections-per-user"`
 	} `json:"attributes"`
-	Identifier       *string             `json:"identifier,omitempty"`
-	Name             string              `json:"name"`
-	ParentIdentifier *string             `json:"parentIdentifier,omitempty"`
-	Type             ConnectionGroupType `json:"type"`
+	ChildConnectionGroups *[]ConnectionGroup  `json:"childConnectionGroups,omitempty"`
+	Identifier            *string             `json:"identifier,omitempty"`
+	Name                  string              `json:"name"`
+	ParentIdentifier      string              `json:"parentIdentifier"`
+	Type                  ConnectionGroupType `json:"type"`
 }
 
 // ConnectionGroupAttributesEnableSessionAffinity defines model for ConnectionGroup.Attributes.EnableSessionAffinity.
@@ -489,7 +490,7 @@ type ConnectionGroupTree struct {
 	ChildConnections      *[]Connection           `json:"childConnections,omitempty"`
 	Identifier            *string                 `json:"identifier,omitempty"`
 	Name                  string                  `json:"name"`
-	ParentIdentifier      *string                 `json:"parentIdentifier,omitempty"`
+	ParentIdentifier      string                  `json:"parentIdentifier"`
 	Type                  ConnectionGroupTreeType `json:"type"`
 }
 

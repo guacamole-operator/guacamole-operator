@@ -36,8 +36,9 @@ spec:
             description: ConnectionSpec defines the desired state of Connection.
             properties:
               parent:
-                default: ROOT
-                description: Parent of the connection. Defaults to ROOT if not specified.
+                default: /
+                description: Parent of the connection specified as a path (/<group>/<group>).
+                  Defaults to ROOT if not specified.
                 type: string
               protocol:
                 description: Protocol of the connection.
@@ -49,6 +50,10 @@ spec:
               identifier:
                 description: Guacamole internal identifier of the connection. Missing
                   if connection not yet configured.
+                type: string
+              parent:
+                description: Guacamole internal identifier of the connection's parent
+                  group. Missing if connection not yet configured.
                 type: string
             type: object
         type: object
