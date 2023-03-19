@@ -29,19 +29,21 @@ func New(client *client.Client) *Reconciler {
 func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 	identifier := obj.Status.Identifier
 
+	// Normalize parameters
+	if obj.Spec.Parameters == nil {
+		obj.Spec.Parameters = &v1alpha1.ConnectionParameters{
+			RawMessage: []byte("{}"),
+		}
+	}
+
+	params := gen.ConnectionParameters{}
+	err := params.UnmarshalJSON(obj.Spec.Parameters.RawMessage)
+	if err != nil {
+		return err
+	}
+
 	// Update connection.
 	if identifier != nil {
-		params := gen.ConnectionParameters{}
-		if obj.Spec.Protocol == "vnc" {
-			if err := params.FromConnectionParametersVNC(gen.ConnectionParametersVNC{}); err != nil {
-				return err
-			}
-		} else if obj.Spec.Protocol == "rdp" {
-			if err := params.FromConnectionParametersRDP(gen.ConnectionParametersRDP{}); err != nil {
-				return err
-			}
-		}
-
 		request := gen.ConnectionRequest{
 			Name:             obj.Name,
 			Protocol:         obj.Spec.Protocol,
@@ -72,6 +74,7 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 		Name:             obj.Name,
 		Protocol:         obj.Spec.Protocol,
 		ParentIdentifier: parent,
+		Parameters:       params,
 	}
 
 	response, err := r.client.CreateConnectionWithResponse(ctx, r.client.Source, request)
