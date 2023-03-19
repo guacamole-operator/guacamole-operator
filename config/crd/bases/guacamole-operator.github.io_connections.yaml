@@ -39,6 +39,10 @@ spec:
           spec:
             description: ConnectionSpec defines the desired state of Connection.
             properties:
+              parameters:
+                description: Parameter of the connection
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
               parent:
                 default: /
                 description: Parent of the connection specified as a path (/<group>/<group>).

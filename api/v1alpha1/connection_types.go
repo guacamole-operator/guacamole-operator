@@ -17,6 +17,8 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"encoding/json"
+
 	"github.com/guacamole-operator/guacamole-operator/internal/client/gen"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -36,8 +38,9 @@ type ConnectionSpec struct {
 	Parent *string `json:"parent,omitempty"`
 
 	// Parameter of the connection
+	//
 	// +optional
-	// Parameters *ConnectionParameters `json:"parameters,omitempty"`
+	Parameters *ConnectionParameters `json:"parameters,omitempty"`
 }
 
 // ConnectionStatus defines the observed state of Connection.
@@ -83,3 +86,11 @@ func init() {
 
 // ConnectionProtocol...
 type ConnectionProtocol = gen.ConnectionProtocol
+
+// ConnectionParameters...
+type ConnectionParameters struct {
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	json.RawMessage `json:",inline"`
+}
