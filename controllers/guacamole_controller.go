@@ -44,8 +44,11 @@ type GuacamoleReconciler struct {
 	declarative.Reconciler
 }
 
-//+kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles/status,verbs=get;update;patch
+//
+// +kubebuilder:rbac:groups="",resources=services;serviceaccounts;secrets;configmaps,verbs=get;list;watch;create;update;delete;patch
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete;patch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
