@@ -81,6 +81,12 @@ rules:
 - apiGroups:
   - guacamole-operator.github.io
   resources:
+  - guacamoles/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - guacamole-operator.github.io
+  resources:
   - guacamoles/status
   verbs:
   - get
