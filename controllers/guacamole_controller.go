@@ -46,6 +46,7 @@ type GuacamoleReconciler struct {
 
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles/finalizers,verbs=update
 //
 // +kubebuilder:rbac:groups="",resources=services;serviceaccounts;secrets;configmaps,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete;patch
@@ -65,7 +66,7 @@ func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		declarative.WithObjectTransform(declarative.AddLabels(labels)),
 		declarative.WithOwner(declarative.SourceAsOwner),
 		declarative.WithLabels(watchLabels),
-		declarative.WithStatus(status.NewBasic(mgr.GetClient())),
+		declarative.WithStatus(status.NewKstatusCheck(mgr.GetClient(), &r.Reconciler)),
 		declarative.WithObjectTransform(addon.ApplyPatches),
 		declarative.WithApplyKustomize(),
 	); err != nil {
