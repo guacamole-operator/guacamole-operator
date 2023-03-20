@@ -10,6 +10,7 @@ on:
       - go.sum
       - Containerfile
       - config/**
+      - channels/**.yaml
   workflow_dispatch:
 
 env:
