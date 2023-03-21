@@ -3,6 +3,7 @@ package transformer
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -94,7 +95,7 @@ func applyTLSConfiguration(tls *v1alpha1.TLS, m *manifest.Objects) error {
 
 			m.Items[idx] = obj
 
-			return nil
+			break
 		}
 	}
 
@@ -137,7 +138,7 @@ func applyPostgresConfiguration(guac *v1alpha1.Guacamole, m *manifest.Objects) e
 
 			m.Items[idx] = obj
 
-			return nil
+			break
 		}
 	}
 
@@ -209,7 +210,7 @@ func applyOIDCConfiguration(guac *v1alpha1.Guacamole, m *manifest.Objects) error
 
 			m.Items[idx] = obj
 
-			return nil
+			break
 		}
 	}
 
@@ -228,10 +229,20 @@ func applyAdditionalSettings(values map[string]string, m *manifest.Objects) erro
 			settings := normalizeSettings(values)
 			envs := envVarFromMap(settings)
 
-			deployment.Spec.Template.Spec.Containers[0].Env = append(
-				deployment.Spec.Template.Spec.Containers[0].Env,
+			currentEnvs := deployment.Spec.Template.Spec.Containers[0].Env
+
+			currentEnvs = append(
+				currentEnvs,
 				envs...,
 			)
+
+			// Sort environment variables to avoid reconcile loop due to
+			// a changed order.
+			sort.SliceStable(currentEnvs, func(i, j int) bool {
+				return currentEnvs[i].Name < currentEnvs[j].Name
+			})
+
+			deployment.Spec.Template.Spec.Containers[0].Env = currentEnvs
 
 			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&deployment)
 			if err != nil {
@@ -245,7 +256,7 @@ func applyAdditionalSettings(values map[string]string, m *manifest.Objects) erro
 
 			m.Items[idx] = obj
 
-			return nil
+			break
 		}
 	}
 
@@ -282,7 +293,7 @@ func updateAccessSecret(m *manifest.Objects, guac *v1alpha1.Guacamole) error {
 
 			m.Items[idx] = obj
 
-			return nil
+			break
 		}
 	}
 
