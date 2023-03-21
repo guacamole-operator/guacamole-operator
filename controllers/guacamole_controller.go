@@ -37,11 +37,12 @@ var _ reconcile.Reconciler = &GuacamoleReconciler{}
 
 // GuacamoleReconciler reconciles a Guacamole object.
 type GuacamoleReconciler struct {
+	declarative.Reconciler
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 
-	declarative.Reconciler
+	watchLabels declarative.LabelMaker
 }
 
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles,verbs=get;list;watch;create;update;patch;delete
@@ -51,25 +52,30 @@ type GuacamoleReconciler struct {
 // +kubebuilder:rbac:groups="",resources=services;serviceaccounts;secrets;configmaps,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete;patch
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	addon.Init()
-
+// setupReconciler configures the reconciler.
+func (r *GuacamoleReconciler) setupReconciler(mgr ctrl.Manager) error {
 	labels := map[string]string{
 		"k8s-app": "guacamole",
 	}
 
-	watchLabels := declarative.SourceLabel(mgr.GetScheme())
+	r.watchLabels = declarative.SourceLabel(mgr.GetScheme())
 
-	if err := r.Reconciler.Init(mgr, &guacamolev1alpha1.Guacamole{},
-		declarative.WithObjectTransform(transformer.Guacamole()),
+	return r.Reconciler.Init(mgr, &guacamolev1alpha1.Guacamole{},
 		declarative.WithObjectTransform(declarative.AddLabels(labels)),
 		declarative.WithOwner(declarative.SourceAsOwner),
-		declarative.WithLabels(watchLabels),
+		declarative.WithLabels(r.watchLabels),
 		declarative.WithStatus(status.NewKstatusCheck(mgr.GetClient(), &r.Reconciler)),
-		declarative.WithObjectTransform(addon.ApplyPatches),
+		declarative.WithApplyPrune(),
+		declarative.WithObjectTransform(transformer.Guacamole(), addon.ApplyPatches),
 		declarative.WithApplyKustomize(),
-	); err != nil {
+	)
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	addon.Init()
+
+	if err := r.setupReconciler(mgr); err != nil {
 		return err
 	}
 
@@ -84,8 +90,8 @@ func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	// Watch for changes to deployed objects
-	_, err = declarative.WatchAll(mgr.GetConfig(), c, r, watchLabels)
+	// Watch for changes to deployed objects.
+	_, err = declarative.WatchChildren(declarative.WatchChildrenOptions{Manager: mgr, Controller: c, Reconciler: r, LabelMaker: r.watchLabels})
 	if err != nil {
 		return err
 	}
