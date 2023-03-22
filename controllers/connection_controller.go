@@ -29,7 +29,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	guacamoleoperatorgithubiov1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
@@ -46,6 +49,8 @@ type ConnectionReconciler struct {
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=connections,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=connections/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=connections/finalizers,verbs=update
+//
+// +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles,verbs=get;list
 //
 // +kubebuilder:rbac:groups="",resources=secrets;configmaps,verbs=get;list
 
@@ -166,7 +171,40 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *ConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&guacamoleoperatorgithubiov1alpha1.Connection{}).
+		Watches(
+			&source.Kind{Type: &v1alpha1.Guacamole{}},
+			handler.EnqueueRequestsFromMapFunc(r.guacamoleRequestMapFunc),
+		).
 		Complete(r)
+}
+
+// guacamoleRequestMapFunc returns a list of Connection resources to be enqueued after
+// an event of a corresponding Guacamole resource.
+func (r *ConnectionReconciler) guacamoleRequestMapFunc(obj client.Object) []reconcile.Request {
+	guacamole, ok := obj.(*v1alpha1.Guacamole)
+
+	if !ok {
+		return []reconcile.Request{}
+	}
+
+	// Get all Connections for the relevant namespace.
+	var connections v1alpha1.ConnectionList
+	if err := r.List(context.Background(), &connections, client.InNamespace(guacamole.GetNamespace())); err != nil {
+		return []reconcile.Request{}
+	}
+
+	requests := []reconcile.Request{}
+
+	for _, c := range connections.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      c.GetName(),
+				Namespace: c.GetNamespace(),
+			},
+		})
+	}
+
+	return requests
 }
 
 // getConnectionParamsFromSecret retrieves access parameters for the Guacamole API from secret.
