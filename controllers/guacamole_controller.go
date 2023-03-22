@@ -51,6 +51,9 @@ type GuacamoleReconciler struct {
 //
 // +kubebuilder:rbac:groups="",resources=services;serviceaccounts;secrets;configmaps,verbs=get;list;watch;create;update;delete;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;delete;patch
+//
+// For WithApplyPrune.
+// +kubebuilder:rbac:groups=*,resources=*,verbs=list
 
 // setupReconciler configures the reconciler.
 func (r *GuacamoleReconciler) setupReconciler(mgr ctrl.Manager) error {
