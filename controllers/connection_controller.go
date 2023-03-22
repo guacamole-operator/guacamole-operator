@@ -69,6 +69,14 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	if connection.Status.Conditions == nil || len(connection.Status.Conditions) == 0 {
+		connection.Status.MarkAsUnknown()
+		if err := r.Status().Update(ctx, connection); err != nil {
+			logger.Error(err, "Failed to update status.")
+			return ctrl.Result{}, err
+		}
+	}
+
 	// Create Guacamole API client.
 	config, err := r.getConnectionParamsFromSecret(ctx, req.Namespace)
 	if err != nil {
@@ -78,6 +86,13 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	guacClient, err := guacclient.New(config)
 	if err != nil {
 		logger.Error(err, "Could not create Guacamole API client.")
+
+		connection.Status.MarkAsUnsynchronized()
+		if err := r.Status().Update(ctx, connection); err != nil {
+			logger.Error(err, "Failed to update status.")
+			return ctrl.Result{}, err
+		}
+
 		return ctrl.Result{}, err
 	}
 
@@ -101,8 +116,7 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			// Remove finalizer. Once all finalizers have been
 			// removed, the object will be deleted.
 			if controllerutil.RemoveFinalizer(connection, connectionFinalizer) {
-				err := r.Update(ctx, connection)
-				if err != nil {
+				if err := r.Update(ctx, connection); err != nil {
 					// Error updating the object - requeue the request.
 					logger.Error(err, "Failed to update instance after removing finalizer.")
 					return ctrl.Result{}, err
@@ -118,8 +132,7 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if !controllerutil.ContainsFinalizer(connection, connectionFinalizer) {
 		logger.Info("Add finalizer.")
 		controllerutil.AddFinalizer(connection, connectionFinalizer)
-		err = r.Update(ctx, connection)
-		if err != nil {
+		if err := r.Update(ctx, connection); err != nil {
 			// Error updating the object - requeue the request.
 			logger.Error(err, "Failed to update instance after adding finalizer")
 			return ctrl.Result{}, err
@@ -129,12 +142,19 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Sync state.
 	if err := reconciler.Sync(ctx, connection); err != nil {
 		logger.Error(err, "Could not sync resource.")
+
+		connection.Status.MarkAsUnsynchronized()
+		if err := r.Status().Update(ctx, connection); err != nil {
+			logger.Error(err, "Failed to update status.")
+			return ctrl.Result{}, err
+		}
+
 		return ctrl.Result{}, err
 	}
 
 	// Update status.
-	err = r.Status().Update(ctx, connection)
-	if err != nil {
+	connection.Status.MarkAsSynchronized()
+	if err := r.Status().Update(ctx, connection); err != nil {
 		logger.Error(err, "Failed to update status.")
 		return ctrl.Result{}, err
 	}

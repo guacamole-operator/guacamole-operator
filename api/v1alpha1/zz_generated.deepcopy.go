@@ -23,6 +23,7 @@ package v1alpha1
 
 import (
 	"encoding/json"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -183,6 +184,13 @@ func (in *ConnectionStatus) DeepCopyInto(out *ConnectionStatus) {
 		in, out := &in.Parent, &out.Parent
 		*out = new(string)
 		**out = **in
+	}
+	if in.Conditions != nil {
+		in, out := &in.Conditions, &out.Conditions
+		*out = make([]v1.Condition, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 
