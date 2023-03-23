@@ -27,6 +27,9 @@ import (
 
 // ConnectionSpec defines the desired state of Connection.
 type ConnectionSpec struct {
+	// GuacamoleRef references the instance this connection belongs to.
+	GuacamoleRef GuacamoleRef `json:"guacamoleRef"`
+
 	// Protocol of the connection.
 	Protocol ConnectionProtocol `json:"protocol,omitempty"`
 
@@ -87,6 +90,12 @@ type ConnectionList struct {
 
 func init() {
 	SchemeBuilder.Register(&Connection{}, &ConnectionList{})
+}
+
+// GuacamoleRef...
+type GuacamoleRef struct {
+	// Name of the Guacamole instance.
+	Name string `json:"name"`
 }
 
 // ConnectionProtocol...

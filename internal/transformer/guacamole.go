@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/kubebuilder-declarative-pattern/pkg/patterns/declarative"
 	"sigs.k8s.io/kubebuilder-declarative-pattern/pkg/patterns/declarative/pkg/manifest"
 
@@ -19,7 +20,7 @@ import (
 const GuacamoleDeploymentName = "guacamole"
 
 // Guacamole transform the guacamole deployment manifest.
-func Guacamole() declarative.ObjectTransform {
+func Guacamole(client client.Client) declarative.ObjectTransform {
 	return func(ctx context.Context, obj declarative.DeclarativeObject, m *manifest.Objects) error {
 		guac := obj.(*v1alpha1.Guacamole)
 
@@ -47,10 +48,13 @@ func Guacamole() declarative.ObjectTransform {
 			}
 		}
 
-		// Modify secret for guacamole access parameters.
-		err := updateAccessSecret(m, guac)
+		// Add instance name to resources.
+		if err := addInstanceName(m, guac); err != nil {
+			return err
+		}
 
-		return err
+		// Add access information to status.
+		return addAccessParameters(client, guac)
 	}
 }
 
@@ -263,25 +267,25 @@ func applyAdditionalSettings(values map[string]string, m *manifest.Objects) erro
 	return nil
 }
 
-func updateAccessSecret(m *manifest.Objects, guac *v1alpha1.Guacamole) error {
-	const guacamoleCredentialsSecret = "guacamole-credentials"
-	const guacamoleInitialPassword = "guacadmin"
-
+func addInstanceName(m *manifest.Objects, guac *v1alpha1.Guacamole) error {
 	for idx, item := range m.Items {
-		if isSecret(item) && item.GetName() == guacamoleCredentialsSecret {
-			var secret corev1.Secret
-			err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.UnstructuredObject().Object, &secret)
+		instance := item.GetName() + "-" + guac.Name
+		if err := item.SetName(instance); err != nil {
+			return err
+		}
+
+		if isDeployment(item) {
+			var deployment appsv1.Deployment
+			err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.UnstructuredObject().Object, &deployment)
 			if err != nil {
-				return fmt.Errorf("error converting secret from unstructured: %w", err)
-			}
-			secret.StringData["server"] = fmt.Sprintf("http://guacamole.%s:80/guacamole/api", guac.Namespace)
-			secret.StringData["password"] = guacamoleInitialPassword
-
-			if guac.Spec.Auth.Postgres != nil {
-				secret.StringData["source"] = "postgresql"
+				return fmt.Errorf("error converting deployment from unstructured: %w", err)
 			}
 
-			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&secret)
+			if deployment.Spec.Template.Spec.ServiceAccountName != "" {
+				deployment.Spec.Template.Spec.ServiceAccountName = instance
+			}
+
+			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&deployment)
 			if err != nil {
 				return err
 			}
@@ -292,12 +296,27 @@ func updateAccessSecret(m *manifest.Objects, guac *v1alpha1.Guacamole) error {
 			}
 
 			m.Items[idx] = obj
-
-			break
 		}
 	}
 
 	return nil
+}
+
+func addAccessParameters(client client.Client, guac *v1alpha1.Guacamole) error {
+	instance := "guacamole" + "-" + guac.Name
+	ns := guac.Namespace
+
+	source := ""
+	if guac.Spec.Auth.Postgres != nil {
+		source = "postgresql"
+	}
+
+	guac.Status.Access = &v1alpha1.Access{
+		Endpoint: fmt.Sprintf("http://%s.%s.svc.cluster.local/guacamole/api", instance, ns),
+		Source:   source,
+	}
+
+	return client.Status().Update(context.Background(), guac)
 }
 
 func envVarFromParameters(params []v1alpha1.Parameter) []corev1.EnvVar {

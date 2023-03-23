@@ -17,7 +17,7 @@ type Client struct {
 
 // Config for client instantiation.
 type Config struct {
-	Server   string
+	Endpoint string
 	Username string
 	Password string
 	Insecure bool
@@ -41,7 +41,7 @@ func New(config *Config) (*Client, error) {
 		},
 	}
 
-	cl, err := gen.NewClientWithResponses(config.Server, gen.WithHTTPClient(httpClient))
+	cl, err := gen.NewClientWithResponses(config.Endpoint, gen.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func New(config *Config) (*Client, error) {
 		password:            config.Password,
 	}
 
-	c, err := gen.NewClientWithResponses(config.Server, gen.WithHTTPClient(httpClient), gen.WithRequestEditorFn(authenticate(loginClient)))
+	c, err := gen.NewClientWithResponses(config.Endpoint, gen.WithHTTPClient(httpClient), gen.WithRequestEditorFn(authenticate(loginClient)))
 	if err != nil {
 		return nil, err
 	}

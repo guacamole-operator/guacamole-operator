@@ -20,10 +20,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -83,7 +85,7 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Create Guacamole API client.
-	config, err := r.getConnectionParamsFromSecret(ctx, req.Namespace)
+	config, err := r.getConnectionParams(ctx, connection)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -164,54 +166,118 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	logger.Info("Reconciled.")
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	fieldToIndex, err := createGuacamoleIndexer(mgr)
+	if err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&guacamoleoperatorgithubiov1alpha1.Connection{}).
 		Watches(
 			&source.Kind{Type: &v1alpha1.Guacamole{}},
-			handler.EnqueueRequestsFromMapFunc(r.guacamoleRequestMapFunc),
+			r.watchGuacamoleRef(fieldToIndex),
 		).
 		Complete(r)
 }
 
-// guacamoleRequestMapFunc returns a list of Connection resources to be enqueued after
-// an event of a corresponding Guacamole resource.
-func (r *ConnectionReconciler) guacamoleRequestMapFunc(obj client.Object) []reconcile.Request {
-	guacamole, ok := obj.(*v1alpha1.Guacamole)
+// createGuacamoleIndexer creates a local index of Guacamole instaces
+// referenced by Connections.
+func createGuacamoleIndexer(mgr ctrl.Manager) (string, error) {
+	// We build an index for the Guacamole reference within a connection.
+	const fieldToIndex string = ".spec.guacamoleRef.Name"
 
-	if !ok {
-		return []reconcile.Request{}
+	// The indexer function extracts the index field from a given object.
+	indexerFunc := func(obj client.Object) []string {
+		connection, ok := obj.(*v1alpha1.Connection)
+		if !ok {
+			return nil
+		}
+		if connection.Spec.GuacamoleRef.Name == "" {
+			return nil
+		}
+		return []string{connection.Spec.GuacamoleRef.Name}
 	}
 
-	// Get all Connections for the relevant namespace.
-	var connections v1alpha1.ConnectionList
-	if err := r.List(context.Background(), &connections, client.InNamespace(guacamole.GetNamespace())); err != nil {
-		return []reconcile.Request{}
+	// Build the indexer.
+	err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.Connection{}, fieldToIndex, indexerFunc)
+	if err != nil {
+		return "", err
 	}
 
-	requests := []reconcile.Request{}
-
-	for _, c := range connections.Items {
-		requests = append(requests, reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      c.GetName(),
-				Namespace: c.GetNamespace(),
-			},
-		})
-	}
-
-	return requests
+	return fieldToIndex, nil
 }
 
-// getConnectionParamsFromSecret retrieves access parameters for the Guacamole API from secret.
-func (r *ConnectionReconciler) getConnectionParamsFromSecret(ctx context.Context, namespace string) (*guacclient.Config, error) {
+func (r *ConnectionReconciler) watchGuacamoleRef(indexField string) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(r.guacamoleRequestMapFunc(indexField))
+}
+
+// guacamoleRequestMapFunc returns a list of Connection resources to be enqueued after
+// an event of a corresponding Guacamole resource.
+func (r *ConnectionReconciler) guacamoleRequestMapFunc(indexField string) handler.MapFunc {
+	return func(obj client.Object) []reconcile.Request {
+		requests := []reconcile.Request{}
+
+		guacamole, ok := obj.(*v1alpha1.Guacamole)
+		if !ok {
+			return requests
+		}
+
+		// Get all relevant connections.
+		listOpts := &client.ListOptions{
+			FieldSelector: fields.OneTermEqualSelector(indexField, obj.GetName()),
+			Namespace:     guacamole.GetNamespace(),
+		}
+
+		var connections v1alpha1.ConnectionList
+		if err := r.List(context.Background(), &connections, listOpts); err != nil {
+			return requests
+		}
+
+		for _, c := range connections.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      c.GetName(),
+					Namespace: c.GetNamespace(),
+				},
+			})
+		}
+
+		return requests
+	}
+}
+
+// getConnectionParams retrieves access parameters for the Guacamole API.
+func (r *ConnectionReconciler) getConnectionParams(ctx context.Context, obj *v1alpha1.Connection) (*guacclient.Config, error) {
+	namespace := obj.GetNamespace()
+
+	// Get corresponding Guacamole instance.
+	guacRef := obj.Spec.GuacamoleRef.Name
+
+	var guac v1alpha1.Guacamole
+	if err := r.Get(ctx, types.NamespacedName{Name: guacRef, Namespace: namespace}, &guac); err != nil {
+		return nil, err
+	}
+
+	if guac.Status.Access == nil {
+		return nil, errors.New("access information missing")
+	}
+
+	clientConfig := &guacclient.Config{
+		Endpoint: guac.Status.Access.Endpoint,
+		Source:   guac.Status.Access.Source,
+	}
+
+	// Retrieve credentials for API access.
+	secretName := "guacamole-" + guacRef + "-credentials"
 	secret := corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "guacamole-credentials",
+			Name:      secretName,
 			Namespace: namespace,
 		},
 	}
@@ -223,11 +289,6 @@ func (r *ConnectionReconciler) getConnectionParamsFromSecret(ctx context.Context
 
 	errInvalidParamaters := errors.New("invalid parameters")
 
-	server, ok := secret.Data["server"]
-	if !ok {
-		return nil, fmt.Errorf("Guacamole server parameter missing: %w", errInvalidParamaters)
-	}
-
 	username, ok := secret.Data["username"]
 	if !ok {
 		return nil, fmt.Errorf("Guacamole username parameter missing: %w", errInvalidParamaters)
@@ -238,16 +299,28 @@ func (r *ConnectionReconciler) getConnectionParamsFromSecret(ctx context.Context
 		return nil, fmt.Errorf("Guacamole password parameter missing: %w", errInvalidParamaters)
 	}
 
-	source, ok := secret.Data["source"]
-	if !ok {
-		return nil, fmt.Errorf("Guacamole source parameter missing: %w", errInvalidParamaters)
+	clientConfig.Username = string(username)
+	clientConfig.Password = string(password)
+
+	// Allow overwriting some parameters. Mainly useful for local testing, where cluster DNS
+	// is not available.
+	endpoint, ok := secret.Data["endpoint"]
+	if ok {
+		clientConfig.Endpoint = string(endpoint)
 	}
 
-	return &guacclient.Config{
-		Server:   string(server),
-		Username: string(username),
-		Password: string(password),
-		Insecure: false,
-		Source:   string(source),
-	}, nil
+	source, ok := secret.Data["source"]
+	if ok {
+		clientConfig.Source = string(source)
+	}
+
+	insecure, ok := secret.Data["insecure"]
+	if ok {
+		b, err := strconv.ParseBool(string(insecure))
+		if err == nil {
+			clientConfig.Insecure = b
+		}
+	}
+
+	return clientConfig, nil
 }

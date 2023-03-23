@@ -4,3 +4,10 @@ metadata:
   name: guacamole
   labels:
     app.kubernetes.io/name: guacamole
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: guacd
+  labels:
+    app.kubernetes.io/name: guacamole
