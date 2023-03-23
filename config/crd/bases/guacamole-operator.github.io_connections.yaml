@@ -39,6 +39,16 @@ spec:
           spec:
             description: ConnectionSpec defines the desired state of Connection.
             properties:
+              guacamoleRef:
+                description: GuacamoleRef references the instance this connection
+                  belongs to.
+                properties:
+                  name:
+                    description: Name of the Guacamole instance.
+                    type: string
+                required:
+                - name
+                type: object
               parameters:
                 description: Parameter of the connection
                 type: object
@@ -51,6 +61,8 @@ spec:
               protocol:
                 description: Protocol of the connection.
                 type: string
+            required:
+            - guacamoleRef
             type: object
           status:
             description: ConnectionStatus defines the observed state of Connection.

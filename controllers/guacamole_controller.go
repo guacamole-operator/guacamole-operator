@@ -57,19 +57,14 @@ type GuacamoleReconciler struct {
 
 // setupReconciler configures the reconciler.
 func (r *GuacamoleReconciler) setupReconciler(mgr ctrl.Manager) error {
-	labels := map[string]string{
-		"k8s-app": "guacamole",
-	}
-
 	r.watchLabels = declarative.SourceLabel(mgr.GetScheme())
 
 	return r.Reconciler.Init(mgr, &guacamolev1alpha1.Guacamole{},
-		declarative.WithObjectTransform(declarative.AddLabels(labels)),
 		declarative.WithOwner(declarative.SourceAsOwner),
 		declarative.WithLabels(r.watchLabels),
 		declarative.WithStatus(status.NewKstatusCheck(mgr.GetClient(), &r.Reconciler)),
 		declarative.WithApplyPrune(),
-		declarative.WithObjectTransform(transformer.Guacamole(), addon.ApplyPatches),
+		declarative.WithObjectTransform(transformer.Guacamole(mgr.GetClient()), addon.ApplyPatches),
 		declarative.WithApplyKustomize(),
 	)
 }

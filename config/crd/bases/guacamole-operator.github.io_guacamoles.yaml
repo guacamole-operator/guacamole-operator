@@ -153,6 +153,20 @@ spec:
           status:
             description: GuacamoleStatus defines the observed state of Guacamole.
             properties:
+              access:
+                description: Information about how to connect to the deployed instance.
+                  Used by other resources to dynamically connect to an API client.
+                properties:
+                  endpoint:
+                    description: Endpoint of the Guacamole API.
+                    type: string
+                  source:
+                    description: Authentication source.
+                    type: string
+                required:
+                - endpoint
+                - source
+                type: object
               conditions:
                 description: Conditions follows the API specification "Conditions"
                   properties. https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties

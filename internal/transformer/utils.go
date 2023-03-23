@@ -7,7 +7,3 @@ import (
 func isDeployment(obj *manifest.Object) bool {
 	return obj.Kind == "Deployment"
 }
-
-func isSecret(obj *manifest.Object) bool {
-	return obj.Kind == "Secret"
-}

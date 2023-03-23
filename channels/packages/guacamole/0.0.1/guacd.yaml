@@ -14,7 +14,7 @@ spec:
       labels:
         app.kubernetes.io/name: guacd
     spec:
-      serviceAccountName: guacamole
+      serviceAccountName: guacd
       containers:
         - name: guacd
           image: docker.io/guacamole/guacd:latest

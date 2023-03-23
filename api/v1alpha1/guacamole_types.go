@@ -38,17 +38,18 @@ type GuacamoleSpec struct {
 	// Additional settings.
 	// +optional
 	AdditionalSettings map[string]string `json:"additionalSettings,omitempty"`
-
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 // GuacamoleStatus defines the observed state of Guacamole.
 type GuacamoleStatus struct {
 	addonv1alpha1.CommonStatus `json:",inline"`
 
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Information about how to connect to the deployed instance.
+	// Used by other resources to dynamically connect to
+	// an API client.
+	//
+	// +optional
+	Access *Access `json:"access,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -96,4 +97,12 @@ type GuacamoleList struct {
 
 func init() {
 	SchemeBuilder.Register(&Guacamole{}, &GuacamoleList{})
+}
+
+// Access...
+type Access struct {
+	// Endpoint of the Guacamole API.
+	Endpoint string `json:"endpoint"`
+	// Authentication source.
+	Source string `json:"source"`
 }
