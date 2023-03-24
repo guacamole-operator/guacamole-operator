@@ -285,6 +285,18 @@ func addInstanceName(m *manifest.Objects, guac *v1alpha1.Guacamole) error {
 				deployment.Spec.Template.Spec.ServiceAccountName = instance
 			}
 
+			if deployment.Name == GuacamoleDeploymentName+"-"+guac.Name {
+				envs := deployment.Spec.Template.Spec.Containers[0].Env
+				for j, e := range envs {
+					if e.Name == "GUACD_HOSTNAME" {
+						e.Value += "-" + guac.Name
+					}
+					envs[j] = e
+				}
+
+				deployment.Spec.Template.Spec.Containers[0].Env = envs
+			}
+
 			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&deployment)
 			if err != nil {
 				return err
