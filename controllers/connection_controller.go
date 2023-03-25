@@ -62,7 +62,7 @@ type ConnectionReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.0/pkg/reconcile
 func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).WithValues("connection", req.NamespacedName)
+	logger := log.FromContext(ctx)
 
 	// Fetch instance.
 	connection := &v1alpha1.Connection{}

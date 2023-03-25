@@ -2829,7 +2829,7 @@ func (r DeleteConnectionResponse) StatusCode() int {
 type GetConnectionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Connections
+	JSON200      *Connection
 }
 
 // Status returns HTTPResponse.Status
@@ -4069,7 +4069,7 @@ func ParseGetConnectionResponse(rsp *http.Response) (*GetConnectionResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Connections
+		var dest Connection
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
