@@ -27,8 +27,6 @@ func New(client *client.Client) *Reconciler {
 
 // Sync synchronizes the connection resource.
 func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
-	identifier := obj.Status.Identifier
-
 	// Normalize parameters
 	if obj.Spec.Parameters == nil {
 		obj.Spec.Parameters = &v1alpha1.ConnectionParameters{
@@ -42,17 +40,42 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 		return err
 	}
 
-	// Update connection.
-	if identifier != nil {
+	// Resolve connection group.
+	parent, err := r.resolveConnectionGroup(ctx, obj)
+	if err != nil {
+		return err
+	}
+
+	// Check if connection already exists.
+	exists, cIdent, err := r.connectionExistsInGroup(ctx, parent, obj.Name)
+	if err != nil {
+		return err
+	}
+
+	// Check if connection exists in old group.
+	oldParent := obj.Status.Parent
+	if oldParent != nil && *oldParent != parent {
+		exists, cIdent, err = r.connectionExistsInGroup(ctx, *oldParent, obj.Name)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Update connection if existent.
+	if exists {
 		request := gen.ConnectionRequest{
 			Name:             obj.Name,
 			Protocol:         obj.Spec.Protocol,
-			ParentIdentifier: *obj.Status.Parent,
+			ParentIdentifier: parent,
 			Parameters:       params,
 			Attributes:       gen.ConnectionAttributes{},
 		}
 
-		response, err := r.client.UpdateConnectionWithResponse(ctx, r.client.Source, *identifier, request)
+		// Update connection. This can fail when a connection changes its parent
+		// and a connection is already in place in the new group. As this connection
+		// can be managed by another CR (or manually) fail and do not delete
+		// or modify it here.
+		response, err := r.client.UpdateConnectionWithResponse(ctx, r.client.Source, cIdent, request)
 		if err != nil {
 			return err
 		}
@@ -61,15 +84,13 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 			return errors.New("could not update connection")
 		}
 
+		obj.Status.Identifier = &cIdent
+		obj.Status.Parent = &parent
+
 		return nil
 	}
 
-	// Create connection.
-	parent, err := r.resolveConnectionGroup(ctx, obj)
-	if err != nil {
-		return err
-	}
-
+	// Create connection otherwise.
 	request := gen.ConnectionRequest{
 		Name:             obj.Name,
 		Protocol:         obj.Spec.Protocol,
@@ -114,6 +135,33 @@ func (r *Reconciler) Delete(ctx context.Context, obj *v1alpha1.Connection) error
 	}
 
 	return nil
+}
+
+func (r *Reconciler) connectionExistsInGroup(ctx context.Context, parent string, name string) (bool, string, error) {
+	exists := false
+	identifier := ""
+
+	response, err := r.client.GetConnectionGroupTreeWithResponse(ctx, r.client.Source, parent)
+	if err != nil {
+		return exists, identifier, err
+	}
+
+	if response.JSON200 == nil {
+		return exists, identifier, errors.New("could not retrieve connection group tree")
+	}
+
+	if response.JSON200.ChildConnections == nil {
+		return exists, identifier, nil
+	}
+
+	for _, c := range *response.JSON200.ChildConnections {
+		if c.Name == name {
+			exists = true
+			identifier = c.Identifier
+		}
+	}
+
+	return exists, identifier, nil
 }
 
 // resolveConnectionGroup resolves a connection group path to the internal identifier.
