@@ -11,6 +11,8 @@ on:
       - Containerfile
       - config/**
       - channels/**.yaml
+    tags:
+      - v*
   workflow_dispatch:
 
 env:
@@ -46,24 +48,24 @@ jobs:
 
       - name: Generate basic SemVer inputs
         id: semver
-        uses: PaulHatch/semantic-version@v5.0.0-alpha2
+        uses: PaulHatch/semantic-version@v5.0.3
         with:
+          tag_prefix: v
           version_format: "${major}.${minor}.${patch}"
-
-      - name: Generate additional vars
-        id: vars
-        run: |
-          echo ::set-output name=timestamp::$(git log -1 --date=format:%Y%m%d%H%M%S --format=%cd)
-          echo ::set-output name=git_sha_short::$(git rev-parse --short HEAD)
 
       - name: Generate final SemVer
         id: version
         run: |
           semver=${{ steps.semver.outputs.version }}
-          timestamp=${{ steps.vars.outputs.timestamp }}
-          sha=${{ steps.vars.outputs.git_sha_short }}
-          version=${semver}-${timestamp}-${sha}
-          echo ::set-output name=version::${version}
+          timestamp=$(git log -1 --date=format:%Y%m%d%H%M%S --format=%cd)
+          sha=$(git rev-parse --short HEAD)
+          version=${semver}
+          
+          if [ "${{ startsWith(github.ref, 'refs/tags/v') }}" != "true" ]; then
+            version=${semver}-${timestamp}-${sha}
+          fi
+
+          echo "version=${version}" >> $GITHUB_OUTPUT
 
   container:
     name: Build operator image
