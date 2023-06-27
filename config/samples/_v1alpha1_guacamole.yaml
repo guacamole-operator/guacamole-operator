@@ -35,23 +35,23 @@ spec:
             key: redirect-uri
     postgres:
       params:
-        - name: POSTGRES_HOSTNAME
+        - name: POSTGRESQL_HOSTNAME
           valueFrom:
             name: guacamoledb-pguser-guacamoledb
             key: host
-        - name: POSTGRES_PORT
+        - name: POSTGRESQL_PORT
           valueFrom:
             name: guacamoledb-pguser-guacamoledb
             key: port
-        - name: POSTGRES_DATABASE
+        - name: POSTGRESQL_DATABASE
           valueFrom:
             name: guacamoledb-pguser-guacamoledb
             key: dbname
-        - name: POSTGRES_USER
+        - name: POSTGRESQL_USER
           valueFrom:
             name: guacamoledb-pguser-guacamoledb
             key: user
-        - name: POSTGRES_PASSWORD
+        - name: POSTGRESQL_PASSWORD
           valueFrom:
             name: guacamoledb-pguser-guacamoledb
             key: password
