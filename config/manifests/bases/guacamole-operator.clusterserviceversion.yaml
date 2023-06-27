@@ -4,6 +4,7 @@ metadata:
   annotations:
     alm-examples: "[]"
     capabilities: Basic Install
+    operatorframework.io/suggested-namespace: guacamole-operator
   name: guacamole-operator.v0.0.0
   namespace: placeholder
 spec:
@@ -688,7 +689,7 @@ spec:
     - vm
   links:
     - name: Guacamole Operator
-      url: https://guacamole-operator.domain
+      url: https://github.com/guacamole-operator
   maintainers:
     - email: 5973515+mpreu@users.noreply.github.com
       name: Matthias Preu
