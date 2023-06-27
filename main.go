@@ -65,6 +65,7 @@ func main() {
 	var err error
 	options := ctrl.Options{Scheme: scheme}
 	if configFile != "" {
+		//nolint:staticcheck
 		options, err = options.AndFrom(ctrl.ConfigFile().AtPath(configFile))
 		if err != nil {
 			setupLog.Error(err, "unable to load the config file")
@@ -73,7 +74,7 @@ func main() {
 	}
 
 	// Set watch namespace. Defaults to cluster scope.
-	options.Namespace = getWatchNamespace()
+	options.Cache.Namespaces = append(options.Cache.Namespaces, getWatchNamespace())
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
