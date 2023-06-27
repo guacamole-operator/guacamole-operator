@@ -36,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	guacamoleoperatorgithubiov1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
@@ -182,7 +181,7 @@ func (r *ConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&guacamoleoperatorgithubiov1alpha1.Connection{}).
 		Watches(
-			&source.Kind{Type: &v1alpha1.Guacamole{}},
+			&v1alpha1.Guacamole{},
 			r.watchGuacamoleRef(fieldToIndex),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
@@ -223,7 +222,7 @@ func (r *ConnectionReconciler) watchGuacamoleRef(indexField string) handler.Even
 // guacamoleRequestMapFunc returns a list of Connection resources to be enqueued after
 // an event of a corresponding Guacamole resource.
 func (r *ConnectionReconciler) guacamoleRequestMapFunc(indexField string) handler.MapFunc {
-	return func(obj client.Object) []reconcile.Request {
+	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		requests := []reconcile.Request{}
 
 		guacamole, ok := obj.(*v1alpha1.Guacamole)
@@ -238,7 +237,7 @@ func (r *ConnectionReconciler) guacamoleRequestMapFunc(indexField string) handle
 		}
 
 		var connections v1alpha1.ConnectionList
-		if err := r.List(context.Background(), &connections, listOpts); err != nil {
+		if err := r.List(ctx, &connections, listOpts); err != nil {
 			return requests
 		}
 
