@@ -182,8 +182,8 @@ func postgresInitContainer(guacImage string) []corev1.Container {
 		},
 		Args: []string{
 			"-c",
-			`export PGPASSWORD=$POSTGRES_PASSWORD
-psql -h $POSTGRES_HOSTNAME -d $POSTGRES_DATABASE -U $POSTGRES_USER -p $POSTGRES_PORT -a -w -f /data/initdb.sql || true`,
+			`export PGPASSWORD=$POSTGRESQL_PASSWORD
+psql -h $POSTGRESQL_HOSTNAME -d $POSTGRESQL_DATABASE -U $POSTGRESQL_USER -p $POSTGRESQL_PORT -a -w -f /data/initdb.sql || true`,
 		},
 	}
 
