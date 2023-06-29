@@ -164,7 +164,7 @@ func postgresInitContainer(guacImage string) []corev1.Container {
 		},
 		Args: []string{
 			"-c",
-			"/opt/guacamole/bin/initdb.sh --postgres > /data/initdb.sql",
+			"/opt/guacamole/bin/initdb.sh --postgresql > /data/initdb.sql",
 		},
 	}
 
