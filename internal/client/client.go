@@ -12,7 +12,8 @@ import (
 // Client for the Guacamole API.
 type Client struct {
 	*gen.ClientWithResponses
-	Source string
+	Source   string
+	Username string
 }
 
 // Config for client instantiation.
@@ -60,6 +61,7 @@ func New(config *Config) (*Client, error) {
 	return &Client{
 		ClientWithResponses: c,
 		Source:              config.Source,
+		Username:            config.Username,
 	}, nil
 }
 

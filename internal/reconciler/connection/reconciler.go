@@ -10,6 +10,7 @@ import (
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/internal/client"
 	"github.com/guacamole-operator/guacamole-operator/internal/client/gen"
+	"github.com/guacamole-operator/guacamole-operator/internal/set"
 )
 
 // Reconciler for the connection resource.
@@ -86,31 +87,53 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 
 		obj.Status.Identifier = &cIdent
 		obj.Status.Parent = &parent
+	} else {
+		// Create connection otherwise.
+		request := gen.ConnectionRequest{
+			Name:             obj.Name,
+			Protocol:         obj.Spec.Protocol,
+			ParentIdentifier: parent,
+			Parameters:       params,
+		}
 
-		return nil
+		response, err := r.client.CreateConnectionWithResponse(ctx, r.client.Source, request)
+		if err != nil {
+			return err
+		}
+
+		if response.JSON200 == nil {
+			return errors.New("could not create connection")
+		}
+
+		obj.Status.Identifier = &response.JSON200.Identifier
+		obj.Status.Parent = &parent
 	}
 
-	// Create connection otherwise.
-	request := gen.ConnectionRequest{
-		Name:             obj.Name,
-		Protocol:         obj.Spec.Protocol,
-		ParentIdentifier: parent,
-		Parameters:       params,
+	// Set permissions for connection.
+	if obj.Spec.Permissions == nil {
+		obj.Spec.Permissions = &v1alpha1.ConnectionPermissions{}
 	}
 
-	response, err := r.client.CreateConnectionWithResponse(ctx, r.client.Source, request)
+	identifier := *obj.Status.Identifier
+	requestedUsers := set.New()
+	for _, user := range obj.Spec.Permissions.Users {
+		requestedUsers.Add(user.ID)
+	}
+
+	connUsers, err := r.getConnectionUsers(ctx, identifier)
 	if err != nil {
 		return err
 	}
 
-	if response.JSON200 == nil {
-		return errors.New("could not create connection")
+	currentUsers := set.FromSlice(connUsers)
+
+	usersToAdd := set.Difference(requestedUsers, currentUsers)
+	if err := r.addConnectionUsers(ctx, identifier, usersToAdd.ToSlice()); err != nil {
+		return err
 	}
 
-	obj.Status.Identifier = &response.JSON200.Identifier
-	obj.Status.Parent = &parent
-
-	return nil
+	usersToDelete := set.Difference(currentUsers, requestedUsers)
+	return r.deleteConnectionUsers(ctx, identifier, usersToDelete.ToSlice())
 }
 
 // Delete deletes the connection resource.
@@ -268,4 +291,100 @@ func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.C
 	}
 
 	return currentParent, nil
+}
+
+// getConnectionUsers returns all users with permissions on a connection.
+func (r *Reconciler) getConnectionUsers(ctx context.Context, connectionID string) ([]string, error) {
+	users := []string{}
+
+	// Query all users and their permissions. API has no ability to just return
+	// users with permissions on a connection.
+	//
+	// TODO: Optimize getting users of connection.
+
+	response, err := r.client.ListUsersWithResponse(ctx, r.client.Source)
+	if err != nil {
+		return users, err
+	}
+
+	if response.JSON200 == nil {
+		return users, errors.New("could not query users")
+	}
+
+	for user := range *response.JSON200 {
+		if user == r.client.Username {
+			continue
+		}
+
+		response, err := r.client.GetUserPermissionsWithResponse(ctx, r.client.Source, user)
+		if err != nil {
+			return users, err
+		}
+
+		if response.JSON200 == nil {
+			return users, fmt.Errorf("could not get permissions of user %s", user)
+		}
+
+		for id := range response.JSON200.ConnectionPermissions {
+			if id == connectionID {
+				users = append(users, user)
+			}
+		}
+	}
+
+	return users, nil
+}
+
+// addConnectionUsers adds READ permissions of users on a connection.
+func (r *Reconciler) addConnectionUsers(ctx context.Context, connectionID string, users []string) error {
+	for _, user := range users {
+		var patch gen.PatchRequest_Item
+		err := patch.FromJSONPatchRequestAdd(gen.JSONPatchRequestAdd{
+			Op:    gen.Add,
+			Path:  fmt.Sprintf("/connectionPermissions/%s", connectionID),
+			Value: string(gen.ObjectPermissionsREAD),
+		})
+		if err != nil {
+			return err
+		}
+
+		response, err := r.client.ModifyUserPermissionsWithResponse(ctx, r.client.Source, user, []gen.PatchRequest_Item{patch})
+		if err != nil {
+			return err
+		}
+
+		if response.StatusCode() != http.StatusNoContent {
+			return fmt.Errorf("could not add permissions of user %s on connection %s", user, connectionID)
+		}
+	}
+
+	return nil
+}
+
+// deleteConnectionUsers removes permissions of users on a connection.
+func (r *Reconciler) deleteConnectionUsers(ctx context.Context, connectionID string, users []string) error {
+	for _, user := range users {
+		var patch gen.PatchRequest_Item
+		var permission any = string(gen.ObjectPermissionsREAD)
+
+		err := patch.FromJSONPatchRequestRemove(gen.JSONPatchRequestRemove{
+			Op:    gen.Remove,
+			Path:  fmt.Sprintf("/connectionPermissions/%s", connectionID),
+			Value: &permission,
+		})
+		if err != nil {
+			return err
+		}
+
+		response, err := r.client.ModifyUserPermissionsWithResponse(ctx, r.client.Source, user, []gen.PatchRequest_Item{patch})
+		if err != nil {
+			return err
+		}
+
+		if response.StatusCode() != http.StatusNoContent {
+			return fmt.Errorf("could not delete permissions of user %s on connection %s", user, connectionID)
+		}
+	}
+
+	return nil
 }
