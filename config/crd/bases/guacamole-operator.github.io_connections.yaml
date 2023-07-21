@@ -61,6 +61,19 @@ spec:
               permissions:
                 description: Permissions.
                 properties:
+                  groups:
+                    description: User groups with permissions on the connection. As
+                      in upstream UI, groups will get READ permissions.
+                    items:
+                      description: ConnectionUser...
+                      properties:
+                        id:
+                          description: Group identifier.
+                          type: string
+                      required:
+                      - id
+                      type: object
+                    type: array
                   users:
                     description: Users with permissions on the connection. As in upstream
                       UI, users will get READ permissions.
@@ -75,6 +88,7 @@ spec:
                       type: object
                     type: array
                 required:
+                - groups
                 - users
                 type: object
               protocol:

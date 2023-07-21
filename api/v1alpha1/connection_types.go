@@ -119,10 +119,19 @@ type ConnectionPermissions struct {
 	// Users with permissions on the connection.
 	// As in upstream UI, users will get READ permissions.
 	Users []ConnectionUser `json:"users"`
+	// User groups with permissions on the connection.
+	// As in upstream UI, groups will get READ permissions.
+	Groups []ConnectionGroup `json:"groups"`
 }
 
 // ConnectionUser...
 type ConnectionUser struct {
 	// User identifier.
+	ID string `json:"id"`
+}
+
+// ConnectionUser...
+type ConnectionGroup struct {
+	// Group identifier.
 	ID string `json:"id"`
 }
