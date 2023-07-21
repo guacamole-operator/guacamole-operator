@@ -58,6 +58,25 @@ spec:
                 description: Parent of the connection specified as a path (/<group>/<group>).
                   Defaults to ROOT if not specified.
                 type: string
+              permissions:
+                description: Permissions.
+                properties:
+                  users:
+                    description: Users with permissions on the connection. As in upstream
+                      UI, users will get READ permissions.
+                    items:
+                      description: ConnectionUser...
+                      properties:
+                        id:
+                          description: User identifier.
+                          type: string
+                      required:
+                      - id
+                      type: object
+                    type: array
+                required:
+                - users
+                type: object
               protocol:
                 description: Protocol of the connection.
                 type: string

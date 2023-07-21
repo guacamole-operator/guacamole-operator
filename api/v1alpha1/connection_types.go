@@ -44,6 +44,11 @@ type ConnectionSpec struct {
 	//
 	// +optional
 	Parameters *ConnectionParameters `json:"parameters,omitempty"`
+
+	// Permissions.
+	//
+	// +optional
+	Permissions *ConnectionPermissions `json:"permissions,omitempty"`
 }
 
 // ConnectionStatus defines the observed state of Connection.
@@ -107,4 +112,17 @@ type ConnectionParameters struct {
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields
 	json.RawMessage `json:",inline"`
+}
+
+// ConnectionPermissions...
+type ConnectionPermissions struct {
+	// Users with permissions on the connection.
+	// As in upstream UI, users will get READ permissions.
+	Users []ConnectionUser `json:"users"`
+}
+
+// ConnectionUser...
+type ConnectionUser struct {
+	// User identifier.
+	ID string `json:"id"`
 }
