@@ -118,10 +118,14 @@ type ConnectionParameters struct {
 type ConnectionPermissions struct {
 	// Users with permissions on the connection.
 	// As in upstream UI, users will get READ permissions.
-	Users []ConnectionUser `json:"users"`
+	//
+	// +optional
+	Users []ConnectionUser `json:"users,omitempty"`
 	// User groups with permissions on the connection.
 	// As in upstream UI, groups will get READ permissions.
-	Groups []ConnectionGroup `json:"groups"`
+	//
+	// +optional
+	Groups []ConnectionGroup `json:"groups,omitempty"`
 }
 
 // ConnectionUser...

@@ -87,9 +87,6 @@ spec:
                       - id
                       type: object
                     type: array
-                required:
-                - groups
-                - users
                 type: object
               protocol:
                 description: Protocol of the connection.
