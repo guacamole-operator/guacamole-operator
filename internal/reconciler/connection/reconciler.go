@@ -28,7 +28,7 @@ func New(client *client.Client) *Reconciler {
 
 // Sync synchronizes the connection resource.
 func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
-	// Normalize parameters
+	// Normalize parameters.
 	if obj.Spec.Parameters == nil {
 		obj.Spec.Parameters = &v1alpha1.ConnectionParameters{
 			RawMessage: []byte("{}"),
@@ -42,7 +42,7 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 	}
 
 	// Resolve connection group.
-	parent, err := r.resolveConnectionGroup(ctx, obj)
+	parent, parents, err := r.resolveConnectionGroup(ctx, obj)
 	if err != nil {
 		return err
 	}
@@ -131,7 +131,7 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 		currentUsers := set.FromSlice(connUsers)
 
 		usersToAdd := set.Difference(requestedUsers, currentUsers)
-		if err := r.addConnectionUsers(ctx, identifier, usersToAdd.ToSlice()); err != nil {
+		if err := r.addConnectionUsers(ctx, identifier, parents, usersToAdd.ToSlice()); err != nil {
 			return err
 		}
 
@@ -156,7 +156,7 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 		currentGroups := set.FromSlice(connGroups)
 
 		groupsToAdd := set.Difference(requestedGroups, currentGroups)
-		if err := r.addConnectionGroups(ctx, identifier, groupsToAdd.ToSlice()); err != nil {
+		if err := r.addConnectionGroups(ctx, identifier, parents, groupsToAdd.ToSlice()); err != nil {
 			return err
 		}
 
@@ -221,8 +221,9 @@ func (r *Reconciler) connectionExistsInGroup(ctx context.Context, parent string,
 }
 
 // resolveConnectionGroup resolves a connection group path to the internal identifier.
-// Missing groups will be created automatically.
-func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.Connection) (string, error) {
+// Missing groups will be created automatically. Returns the direct parent identifier
+// and a list of all parent connection groups.
+func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.Connection) (parent string, parents []string, err error) {
 	path := *obj.Spec.Parent
 	separator := "/"
 
@@ -243,22 +244,22 @@ func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.C
 
 	// Just ROOT.
 	if len(groups) == 1 {
-		return "ROOT", nil
+		return "ROOT", nil, nil
 	}
 
 	// Retrieve current connection groups.
 	response, err := r.client.GetConnectionGroupTreeWithResponse(ctx, r.client.Source, "ROOT")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	if response.JSON200 == nil {
-		return "", errors.New("could not get connection group tree")
+		return "", nil, errors.New("could not get connection group tree")
 	}
 
 	tree := response.JSON200
 
-	// Iterator over all other groups and create them if necessary.
+	// Iterate over all other groups and create them if necessary.
 	currentParent := "ROOT"
 	existingGroups := tree.ChildConnectionGroups
 	for i, group := range groups {
@@ -276,14 +277,15 @@ func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.C
 			}
 			response, err := r.client.CreateConnectionGroupWithResponse(ctx, r.client.Source, request)
 			if err != nil {
-				return "", err
+				return "", nil, err
 			}
 
 			if response.JSON200 == nil {
-				return "", fmt.Errorf("could not create connection group %s", group)
+				return "", nil, fmt.Errorf("could not create connection group %s", group)
 			}
 
 			currentParent = *response.JSON200.Identifier
+			parents = append(parents, currentParent)
 			continue
 		}
 
@@ -294,6 +296,7 @@ func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.C
 			// Group exists.
 			if subGroup.Name == group {
 				currentParent = *subGroup.Identifier
+				parents = append(parents, currentParent)
 				found = true
 				idx = i
 				break
@@ -309,21 +312,22 @@ func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.C
 			}
 			response, err := r.client.CreateConnectionGroupWithResponse(ctx, r.client.Source, request)
 			if err != nil {
-				return "", err
+				return "", nil, err
 			}
 
 			if response.JSON200 == nil {
-				return "", fmt.Errorf("could not create connection group %s", group)
+				return "", nil, fmt.Errorf("could not create connection group %s", group)
 			}
 
 			currentParent = *response.JSON200.Identifier
+			parents = append(parents, currentParent)
 		}
 
 		// Change group level for next loop.
 		existingGroups = (*existingGroups)[idx].ChildConnectionGroups
 	}
 
-	return currentParent, nil
+	return currentParent, parents, nil
 }
 
 // getConnectionUsers returns all users with permissions on a connection.
@@ -369,10 +373,13 @@ func (r *Reconciler) getConnectionUsers(ctx context.Context, connectionID string
 }
 
 // addConnectionUsers adds READ permissions of users on a connection.
-func (r *Reconciler) addConnectionUsers(ctx context.Context, connectionID string, users []string) error {
+//
+// nolint:dupl
+func (r *Reconciler) addConnectionUsers(ctx context.Context, connectionID string, parentGroups []string, users []string) error {
 	for _, user := range users {
-		var patch gen.PatchRequest_Item
-		err := patch.FromJSONPatchRequestAdd(gen.JSONPatchRequestAdd{
+		// Prepare patch entry to add user to a connection.
+		var connectionPatch gen.PatchRequest_Item
+		err := connectionPatch.FromJSONPatchRequestAdd(gen.JSONPatchRequestAdd{
 			Op:    gen.Add,
 			Path:  fmt.Sprintf("/connectionPermissions/%s", connectionID),
 			Value: string(gen.ObjectPermissionsREAD),
@@ -381,7 +388,27 @@ func (r *Reconciler) addConnectionUsers(ctx context.Context, connectionID string
 			return err
 		}
 
-		response, err := r.client.ModifyUserPermissionsWithResponse(ctx, r.client.Source, user, []gen.PatchRequest_Item{patch})
+		var patch []gen.PatchRequest_Item
+		patch = append(patch, connectionPatch)
+
+		// Create additional patch entries to add permissions
+		// to all parent connection groups. Guacamole does not propagate
+		// permissions up the tree as of now.
+		for _, groupID := range parentGroups {
+			var groupPatch gen.PatchRequest_Item
+			err := groupPatch.FromJSONPatchRequestAdd(gen.JSONPatchRequestAdd{
+				Op:    gen.Add,
+				Path:  fmt.Sprintf("/connectionGroupPermissions/%s", groupID),
+				Value: string(gen.ObjectPermissionsREAD),
+			})
+			if err != nil {
+				return err
+			}
+
+			patch = append(patch, groupPatch)
+		}
+
+		response, err := r.client.ModifyUserPermissionsWithResponse(ctx, r.client.Source, user, patch)
 		if err != nil {
 			return err
 		}
@@ -397,10 +424,11 @@ func (r *Reconciler) addConnectionUsers(ctx context.Context, connectionID string
 // deleteConnectionUsers removes permissions of users on a connection.
 func (r *Reconciler) deleteConnectionUsers(ctx context.Context, connectionID string, users []string) error {
 	for _, user := range users {
-		var patch gen.PatchRequest_Item
+		// Prepare patch entry to remove user from a connection.
+		var connectionPatch gen.PatchRequest_Item
 		var permission any = string(gen.ObjectPermissionsREAD)
 
-		err := patch.FromJSONPatchRequestRemove(gen.JSONPatchRequestRemove{
+		err := connectionPatch.FromJSONPatchRequestRemove(gen.JSONPatchRequestRemove{
 			Op:    gen.Remove,
 			Path:  fmt.Sprintf("/connectionPermissions/%s", connectionID),
 			Value: &permission,
@@ -409,7 +437,14 @@ func (r *Reconciler) deleteConnectionUsers(ctx context.Context, connectionID str
 			return err
 		}
 
-		response, err := r.client.ModifyUserPermissionsWithResponse(ctx, r.client.Source, user, []gen.PatchRequest_Item{patch})
+		var patch []gen.PatchRequest_Item
+		patch = append(patch, connectionPatch)
+
+		// TODO: Create additional patch entries to remove permissions
+		// from all parent connection groups. Can only be done when
+		// the user has no other connection permissions in the same group(s).
+
+		response, err := r.client.ModifyUserPermissionsWithResponse(ctx, r.client.Source, user, patch)
 		if err != nil {
 			return err
 		}
@@ -461,10 +496,13 @@ func (r *Reconciler) getConnectionGroups(ctx context.Context, connectionID strin
 }
 
 // addConnectionGroups adds READ permissions of groups on a connection.
-func (r *Reconciler) addConnectionGroups(ctx context.Context, connectionID string, groups []string) error {
+//
+// nolint:dupl
+func (r *Reconciler) addConnectionGroups(ctx context.Context, connectionID string, parentGroups []string, groups []string) error {
 	for _, group := range groups {
-		var patch gen.PatchRequest_Item
-		err := patch.FromJSONPatchRequestAdd(gen.JSONPatchRequestAdd{
+		// Prepare patch entry to add a user group to a connection.
+		var connectionPatch gen.PatchRequest_Item
+		err := connectionPatch.FromJSONPatchRequestAdd(gen.JSONPatchRequestAdd{
 			Op:    gen.Add,
 			Path:  fmt.Sprintf("/connectionPermissions/%s", connectionID),
 			Value: string(gen.ObjectPermissionsREAD),
@@ -473,7 +511,27 @@ func (r *Reconciler) addConnectionGroups(ctx context.Context, connectionID strin
 			return err
 		}
 
-		response, err := r.client.ModifyUserGroupPermissionsWithResponse(ctx, r.client.Source, group, []gen.PatchRequest_Item{patch})
+		var patch []gen.PatchRequest_Item
+		patch = append(patch, connectionPatch)
+
+		// Create additional patch entries to add permissions
+		// to all parent connection groups. Guacamole does not propagate
+		// permissions up the tree as of now.
+		for _, groupID := range parentGroups {
+			var groupPatch gen.PatchRequest_Item
+			err := groupPatch.FromJSONPatchRequestAdd(gen.JSONPatchRequestAdd{
+				Op:    gen.Add,
+				Path:  fmt.Sprintf("/connectionGroupPermissions/%s", groupID),
+				Value: string(gen.ObjectPermissionsREAD),
+			})
+			if err != nil {
+				return err
+			}
+
+			patch = append(patch, groupPatch)
+		}
+
+		response, err := r.client.ModifyUserGroupPermissionsWithResponse(ctx, r.client.Source, group, patch)
 		if err != nil {
 			return err
 		}
@@ -489,10 +547,11 @@ func (r *Reconciler) addConnectionGroups(ctx context.Context, connectionID strin
 // deleteConnectionGroups removes permissions of groups on a connection.
 func (r *Reconciler) deleteConnectionGroups(ctx context.Context, connectionID string, groups []string) error {
 	for _, group := range groups {
-		var patch gen.PatchRequest_Item
+		// Prepare patch entry to remove user group from a connection.
+		var connectionPatch gen.PatchRequest_Item
 		var permission any = string(gen.ObjectPermissionsREAD)
 
-		err := patch.FromJSONPatchRequestRemove(gen.JSONPatchRequestRemove{
+		err := connectionPatch.FromJSONPatchRequestRemove(gen.JSONPatchRequestRemove{
 			Op:    gen.Remove,
 			Path:  fmt.Sprintf("/connectionPermissions/%s", connectionID),
 			Value: &permission,
@@ -501,7 +560,14 @@ func (r *Reconciler) deleteConnectionGroups(ctx context.Context, connectionID st
 			return err
 		}
 
-		response, err := r.client.ModifyUserGroupPermissionsWithResponse(ctx, r.client.Source, group, []gen.PatchRequest_Item{patch})
+		var patch []gen.PatchRequest_Item
+		patch = append(patch, connectionPatch)
+
+		// TODO: Create additional patch entries to remove permissions
+		// from all parent connection groups. Can only be done when
+		// the user has no other connection permissions in the same group(s).
+
+		response, err := r.client.ModifyUserGroupPermissionsWithResponse(ctx, r.client.Source, group, patch)
 		if err != nil {
 			return err
 		}
