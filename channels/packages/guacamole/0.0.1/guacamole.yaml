@@ -55,6 +55,19 @@ spec:
                 done
               fi
 
+              # The home directory template used by the container entrypoint.
+              # Needed to inject properties and extensions.
+              export GUACAMOLE_HOME=/tmp/guacamole
+              mkdir -p "${GUACAMOLE_HOME}"
+
+              # Configure extensions.
+              mkdir -p "${GUACAMOLE_HOME}/extensions"
+              [ -d "/extensions" ] && cp -r /extensions/. "${GUACAMOLE_HOME}/extensions"
+
+              # Workaround for https://github.com/apache/guacamole-client/pull/794
+              # not being backported to version 1.5.x.
+              printf "enable-environment-properties: true\n" > "${GUACAMOLE_HOME}/guacamole.properties"
+
               # Run original entrypoint.
               /opt/guacamole/bin/start.sh
           env:
@@ -62,6 +75,10 @@ spec:
               value: guacd
             - name: GUACD_PORT
               value: "4822"
+          volumeMounts:
+            - name: extensions
+              mountPath: /extensions
+              optional: true
           ports:
             - name: http
               containerPort: 8080
