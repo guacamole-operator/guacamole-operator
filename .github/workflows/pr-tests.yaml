@@ -6,6 +6,7 @@ on:
       - go.mod
       - go.sum
       - Containerfile
+      - "!containers/**"
 jobs:
   test:
     name: Run tests
