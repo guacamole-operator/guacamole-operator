@@ -36,6 +36,7 @@ jobs:
       - name: Build image
         uses: redhat-actions/buildah-build@v2
         id: build
+        working-directory: ./containers/extension-dl
         with:
           image: ${{ env.IMAGE_NAME }}
           tags: ${{ steps.version.outputs.version }}
