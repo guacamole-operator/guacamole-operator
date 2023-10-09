@@ -38,6 +38,10 @@ type GuacamoleSpec struct {
 	// Additional settings.
 	// +optional
 	AdditionalSettings map[string]string `json:"additionalSettings,omitempty"`
+
+	// Extensions to provision.
+	// +optional
+	Extensions []Extension `json:"extensions,omitempty"`
 }
 
 // GuacamoleStatus defines the observed state of Guacamole.
@@ -97,6 +101,12 @@ type GuacamoleList struct {
 
 func init() {
 	SchemeBuilder.Register(&Guacamole{}, &GuacamoleList{})
+}
+
+// Extension...
+type Extension struct {
+	// URI for the extension.
+	URI string `json:"uri"`
 }
 
 // Access...

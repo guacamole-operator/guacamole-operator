@@ -17,7 +17,10 @@ import (
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 )
 
-const GuacamoleDeploymentName = "guacamole"
+const (
+	GuacamoleDeploymentName = "guacamole"
+	extensionDLImage        = "ghcr.io/guacamole-operator/extension-dl:025675e"
+)
 
 // Guacamole transform the guacamole deployment manifest.
 func Guacamole(client client.Client) declarative.ObjectTransform {
@@ -44,6 +47,12 @@ func Guacamole(client client.Client) declarative.ObjectTransform {
 
 		if guac.Spec.AdditionalSettings != nil {
 			if err := applyAdditionalSettings(guac.Spec.AdditionalSettings, m); err != nil {
+				return err
+			}
+		}
+
+		if guac.Spec.Extensions != nil {
+			if err := applyExtensions(guac.Spec.Extensions, m); err != nil {
 				return err
 			}
 		}
@@ -81,7 +90,7 @@ func applyTLSConfiguration(tls *v1alpha1.TLS, m *manifest.Objects) error {
 				},
 			})
 
-			ensureVolumeMount(&deployment, "guacamole", corev1.VolumeMount{
+			ensureContainerVolumeMount(&deployment, "guacamole", corev1.VolumeMount{
 				Name:      "ca-bundle",
 				ReadOnly:  true,
 				MountPath: "/opt/ca-bundle",
@@ -267,6 +276,63 @@ func applyAdditionalSettings(values map[string]string, m *manifest.Objects) erro
 	return nil
 }
 
+func applyExtensions(extensions []v1alpha1.Extension, m *manifest.Objects) error {
+	var extUris []string
+	for _, e := range extensions {
+		extUris = append(extUris, e.URI)
+	}
+
+	for idx, item := range m.Items {
+		if isDeployment(item) && item.GetName() == GuacamoleDeploymentName {
+			var deployment appsv1.Deployment
+			err := runtime.DefaultUnstructuredConverter.FromUnstructured(item.UnstructuredObject().Object, &deployment)
+			if err != nil {
+				return fmt.Errorf("error converting deployment from unstructured: %w", err)
+			}
+
+			// Apply init container for extension download.
+			// TODO: Append instead of replace.
+			downloaderContainer := corev1.Container{
+				Name:  "extension-dl",
+				Image: extensionDLImage,
+				Args:  extUris,
+			}
+
+			deployment.Spec.Template.Spec.InitContainers = []corev1.Container{downloaderContainer}
+
+			// Mount emptyDir volume to place extensions.
+			ensureVolume(&deployment, corev1.Volume{
+				Name: "extensions",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			})
+
+			ensureInitContainerVolumeMount(&deployment, "extension-dl", corev1.VolumeMount{
+				Name: "extensions",
+				// GUACAMOLE_HOME=/tmp/guacamole required.
+				MountPath: "/extensions",
+			})
+
+			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&deployment)
+			if err != nil {
+				return err
+			}
+
+			obj, err := manifest.NewObject(&unstructured.Unstructured{Object: u})
+			if err != nil {
+				return err
+			}
+
+			m.Items[idx] = obj
+
+			break
+		}
+	}
+
+	return nil
+}
+
 func addInstanceName(m *manifest.Objects, guac *v1alpha1.Guacamole) error {
 	for idx, item := range m.Items {
 		instance := item.GetName() + "-" + guac.Name
@@ -373,7 +439,7 @@ func ensureVolume(deployment *appsv1.Deployment, volume corev1.Volume) {
 	deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, volume)
 }
 
-func ensureVolumeMount(deployment *appsv1.Deployment, container string, mount corev1.VolumeMount) {
+func ensureContainerVolumeMount(deployment *appsv1.Deployment, container string, mount corev1.VolumeMount) {
 	for i, c := range deployment.Spec.Template.Spec.Containers {
 		if c.Name == container {
 			for j, m := range c.VolumeMounts {
@@ -385,6 +451,24 @@ func ensureVolumeMount(deployment *appsv1.Deployment, container string, mount co
 
 			deployment.Spec.Template.Spec.Containers[i].VolumeMounts = append(
 				deployment.Spec.Template.Spec.Containers[i].VolumeMounts,
+				mount,
+			)
+		}
+	}
+}
+
+func ensureInitContainerVolumeMount(deployment *appsv1.Deployment, container string, mount corev1.VolumeMount) {
+	for i, c := range deployment.Spec.Template.Spec.InitContainers {
+		if c.Name == container {
+			for j, m := range c.VolumeMounts {
+				if m.Name == mount.Name {
+					deployment.Spec.Template.Spec.InitContainers[i].VolumeMounts[j] = mount
+					return
+				}
+			}
+
+			deployment.Spec.Template.Spec.InitContainers[i].VolumeMounts = append(
+				deployment.Spec.Template.Spec.InitContainers[i].VolumeMounts,
 				mount,
 			)
 		}

@@ -11,8 +11,8 @@ require (
 	k8s.io/api v0.27.2
 	k8s.io/apimachinery v0.27.2
 	k8s.io/client-go v0.27.2
-	sigs.k8s.io/controller-runtime v0.15.0
-	sigs.k8s.io/kubebuilder-declarative-pattern v0.13.0-beta.1.0.20230623223706-f988556bad2d
+	sigs.k8s.io/controller-runtime v0.15.2
+	sigs.k8s.io/kubebuilder-declarative-pattern v0.15.0-beta.1
 )
 
 require (
