@@ -298,6 +298,15 @@ func applyExtensions(extensions []v1alpha1.Extension, m *manifest.Objects) error
 				Args:  extUris,
 			}
 
+			// Apply cluster proxy.
+			for _, v := range getProxyVariables() {
+				if v.Value == "" {
+					continue
+				}
+
+				downloaderContainer.Env = append(downloaderContainer.Env, v)
+			}
+
 			deployment.Spec.Template.Spec.InitContainers = []corev1.Container{downloaderContainer}
 
 			// Mount emptyDir volume to place extensions.
