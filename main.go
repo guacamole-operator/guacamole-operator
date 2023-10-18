@@ -28,8 +28,11 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	v1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/controllers"
@@ -68,9 +71,11 @@ func main() {
 
 	var err error
 	options := ctrl.Options{
-		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
-		Port:                   9443, //nolint:gomnd
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
+		WebhookServer:          webhook.NewServer(webhook.Options{Port: 9443}), //nolint:gomnd
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "643bc562.guacamole-operator.github.io",
@@ -88,7 +93,9 @@ func main() {
 	}
 
 	// Set watch namespace. Defaults to cluster scope.
-	options.Cache.Namespaces = append(options.Cache.Namespaces, getWatchNamespace())
+	options.Cache.DefaultNamespaces = map[string]cache.Config{
+		getWatchNamespace(): {},
+	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), options)
 	if err != nil {
