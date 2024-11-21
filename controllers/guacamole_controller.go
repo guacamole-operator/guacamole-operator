@@ -83,7 +83,7 @@ func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch for changes to Guacamole
-	err = c.Watch(source.Kind(mgr.GetCache(), &guacamolev1alpha1.Guacamole{}), &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &guacamolev1alpha1.Guacamole{}, &handler.TypedEnqueueRequestForObject[*guacamolev1alpha1.Guacamole]{}))
 	if err != nil {
 		return err
 	}

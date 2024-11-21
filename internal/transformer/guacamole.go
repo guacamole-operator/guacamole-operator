@@ -24,7 +24,7 @@ const (
 
 // Guacamole transform the guacamole deployment manifest.
 func Guacamole(client client.Client) declarative.ObjectTransform {
-	return func(ctx context.Context, obj declarative.DeclarativeObject, m *manifest.Objects) error {
+	return func(_ context.Context, obj declarative.DeclarativeObject, m *manifest.Objects) error {
 		guac := obj.(*v1alpha1.Guacamole)
 
 		if guac.Spec.TLS != nil {

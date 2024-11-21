@@ -75,7 +75,7 @@ func main() {
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
-		WebhookServer:          webhook.NewServer(webhook.Options{Port: 9443}), //nolint:gomnd
+		WebhookServer:          webhook.NewServer(webhook.Options{Port: 9443}), //nolint:mnd
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "643bc562.guacamole-operator.github.io",

@@ -77,7 +77,7 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	if connection.Status.Conditions == nil || len(connection.Status.Conditions) == 0 {
+	if len(connection.Status.Conditions) == 0 {
 		connection.Status.MarkAsUnknown()
 		if err := r.Status().Update(ctx, connection); err != nil {
 			logger.Error(err, "Failed to update status.")
