@@ -19,7 +19,7 @@ import (
 
 const (
 	GuacamoleDeploymentName = "guacamole"
-	extensionDLImage        = "ghcr.io/guacamole-operator/extension-dl:025675e"
+	extensionDLImage        = "ghcr.io/guacamole-operator/extension-dl:277d1ab"
 )
 
 // Guacamole transform the guacamole deployment manifest.
@@ -320,6 +320,12 @@ func applyExtensions(extensions []v1alpha1.Extension, m *manifest.Objects) error
 			ensureInitContainerVolumeMount(&deployment, "extension-dl", corev1.VolumeMount{
 				Name: "extensions",
 				// GUACAMOLE_HOME=/tmp/guacamole required.
+				MountPath: "/extensions",
+			})
+
+			ensureContainerVolumeMount(&deployment, "guacamole", corev1.VolumeMount{
+				Name:      "extensions",
+				ReadOnly:  true,
 				MountPath: "/extensions",
 			})
 
