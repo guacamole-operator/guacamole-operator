@@ -75,10 +75,6 @@ spec:
               value: guacd
             - name: GUACD_PORT
               value: "4822"
-          volumeMounts:
-            - name: extensions
-              mountPath: /extensions
-              optional: true
           ports:
             - name: http
               containerPort: 8080
