@@ -8,6 +8,6 @@ resources:
 
 images:
   - name: docker.io/guacamole/guacd:latest
-    newTag: 1.5.3
+    newTag: 1.5.5
   - name: docker.io/guacamole/guacamole:latest
-    newTag: 1.5.3
+    newTag: 1.5.5

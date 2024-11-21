@@ -9,14 +9,6 @@ rules:
   resources:
   - configmaps
   - secrets
-  verbs:
-  - get
-  - list
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  - secrets
   - serviceaccounts
   - services
   verbs:
@@ -49,31 +41,6 @@ rules:
   - guacamole-operator.github.io
   resources:
   - connections
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - guacamole-operator.github.io
-  resources:
-  - connections/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - guacamole-operator.github.io
-  resources:
-  - connections/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - guacamole-operator.github.io
-  resources:
   - guacamoles
   verbs:
   - create
@@ -86,12 +53,14 @@ rules:
 - apiGroups:
   - guacamole-operator.github.io
   resources:
+  - connections/finalizers
   - guacamoles/finalizers
   verbs:
   - update
 - apiGroups:
   - guacamole-operator.github.io
   resources:
+  - connections/status
   - guacamoles/status
   verbs:
   - get

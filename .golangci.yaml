@@ -4,12 +4,12 @@ linters:
     - dogsled
     - dupl
     - exhaustive
-    - exportloopref
+    - copyloopvar
     - goconst
     - godot
     - gofumpt
     - goimports
-    - gomnd
+    - mnd
     - importas
     - revive
     - unconvert
@@ -19,13 +19,16 @@ linters:
 linters-settings:
   exhaustive:
     default-signifies-exhaustive: true
-  gomnd:
-    settings:
-      mnd:
-        ignored-functions: strconv.FormatInt
   importas:
     alias:
       - pkg: k8s.io/api/core/v1
         alias: corev1
       - pkg: k8s.io/apimachinery/pkg/apis/meta/v1
         alias: metav1
+  revive:
+    rules:
+      - name: dot-imports
+        arguments:
+          - allowedPackages:
+              - github.com/onsi/ginkgo/v2
+              - github.com/onsi/gomega
