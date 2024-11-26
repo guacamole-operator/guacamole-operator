@@ -64,6 +64,9 @@ func (r *GuacamoleReconciler) setupReconciler(mgr ctrl.Manager) error {
 		declarative.WithLabels(r.watchLabels),
 		declarative.WithStatus(status.NewKstatusCheck(mgr.GetClient(), &r.Reconciler)),
 		declarative.WithApplyPrune(),
+		// Transformation for Guacd is executed first to avoid changes on instance resources
+		// made by Guacamole transformation.
+		declarative.WithObjectTransform(transformer.Guacd(mgr.GetClient()), addon.ApplyPatches),
 		declarative.WithObjectTransform(transformer.Guacamole(mgr.GetClient()), addon.ApplyPatches),
 		declarative.WithApplyKustomize(),
 	)
