@@ -42,6 +42,10 @@ type GuacamoleSpec struct {
 	// Extensions to provision.
 	// +optional
 	Extensions []Extension `json:"extensions,omitempty"`
+
+	// Guacd configuration.
+	// +optional
+	Guacd *Guacd `json:"guacd,omitempty"`
 }
 
 // GuacamoleStatus defines the observed state of Guacamole.
@@ -115,4 +119,16 @@ type Access struct {
 	Endpoint string `json:"endpoint"`
 	// Authentication source.
 	Source string `json:"source"`
+}
+
+// Guacd...
+type Guacd struct {
+	// +optional
+	Metadata *ObjectMeta `json:"metadata,omitempty"`
+}
+
+// ObjectMeta...
+type ObjectMeta struct {
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 }

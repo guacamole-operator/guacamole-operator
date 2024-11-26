@@ -147,6 +147,18 @@ spec:
                   - uri
                   type: object
                 type: array
+              guacd:
+                description: Guacd configuration.
+                properties:
+                  metadata:
+                    description: ObjectMeta...
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                type: object
               patches:
                 items:
                   type: object
