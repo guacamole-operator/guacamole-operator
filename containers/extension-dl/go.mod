@@ -1,6 +1,6 @@
 module github.com/guacamole-operator/guacamole-operator
 
-go 1.23
+go 1.24.3
 
 require github.com/hashicorp/go-getter/v2 v2.2.3
 
@@ -12,7 +12,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-safetemp v1.0.0 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
-	github.com/klauspost/compress v1.17.11 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
 	github.com/ulikunitz/xz v0.5.12 // indirect
