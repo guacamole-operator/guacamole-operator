@@ -11,9 +11,12 @@
       "source.organizeImports": "explicit"
     },
   },
-  "go.lintTool": "golangci-lint",
+  "go.lintTool": "golangci-lint-v2",
   "go.lintFlags": [
     "--fix"
   ],
   "go.lintOnSave": "workspace",
+  "gopls": {
+    "formatting.gofumpt": true,
+  }
 }

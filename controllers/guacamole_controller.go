@@ -59,7 +59,7 @@ type GuacamoleReconciler struct {
 func (r *GuacamoleReconciler) setupReconciler(mgr ctrl.Manager) error {
 	r.watchLabels = declarative.SourceLabel(mgr.GetScheme())
 
-	return r.Reconciler.Init(mgr, &guacamolev1alpha1.Guacamole{},
+	return r.Init(mgr, &guacamolev1alpha1.Guacamole{},
 		declarative.WithOwner(declarative.SourceAsOwner),
 		declarative.WithLabels(r.watchLabels),
 		declarative.WithStatus(status.NewKstatusCheck(mgr.GetClient(), &r.Reconciler)),

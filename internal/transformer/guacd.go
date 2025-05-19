@@ -46,17 +46,17 @@ func applyAnnotations(objMeta *v1alpha1.ObjectMeta, m *manifest.Objects) error {
 			annotations := objMeta.Annotations
 
 			// Merge annotations.
-			if deployment.ObjectMeta.Annotations == nil {
-				deployment.ObjectMeta.Annotations = make(map[string]string)
+			if deployment.Annotations == nil {
+				deployment.Annotations = make(map[string]string)
 			}
 
-			maps.Insert(deployment.ObjectMeta.Annotations, maps.All(annotations))
+			maps.Insert(deployment.Annotations, maps.All(annotations))
 
 			// Merge template annotations.
-			if deployment.Spec.Template.ObjectMeta.Annotations == nil {
-				deployment.Spec.Template.ObjectMeta.Annotations = make(map[string]string)
+			if deployment.Spec.Template.Annotations == nil {
+				deployment.Spec.Template.Annotations = make(map[string]string)
 			}
-			maps.Insert(deployment.Spec.Template.ObjectMeta.Annotations, maps.All(annotations))
+			maps.Insert(deployment.Spec.Template.Annotations, maps.All(annotations))
 
 			u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&deployment)
 			if err != nil {
