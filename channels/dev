@@ -1,5 +1,5 @@
 # Versions for the dev channel
 
 manifests:
-
-- version: 0.0.1
+  - version: 0.0.1
+  - version: 0.0.2

@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guacamole
+  labels:
+    app.kubernetes.io/name: guacamole
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: guacamole
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: guacamole
+    spec:
+      serviceAccountName: guacamole
+      containers:
+        - name: guacamole
+          image: docker.io/guacamole/guacamole:latest
+          command:
+            - /bin/bash
+          args:
+            - -c
+            - |
+              set -e
+
+              # Import ca-certs.
+              if [ -d "/opt/ca-bundle" ]; then
+                echo "Importing ca-certificates."
+
+                CERTFILES=$(find /opt/ca-bundle -mindepth 1 -maxdepth 1 -name '*.pem')
+
+                for CERTFILE in $CERTFILES; do
+                    # Remove path, then suffix to derive alias from filename
+                    ALIAS=${CERTFILE##*/}
+                    ALIAS=${ALIAS%.*}
+                    $JAVA_HOME/bin/keytool \
+                      -importcert \
+                      -file "$CERTFILE" \
+                      -alias "$ALIAS" \
+                      -trustcacerts \
+                      -storepass changeit \
+                      -noprompt
+
+                    if [ $? -ne 0 ]; then
+                        echo "Failed to add $CERTFILE as $ALIAS to keystore"
+                        exit 1
+                    fi
+
+                    # Use user keystore, as system keystore is not writable in the used container.
+                    # Disadvantage is, that regular public CAs are not used anymore.
+                    export JAVA_OPTS="$JAVA_OPTS -Djavax.net.ssl.trustStore=$HOME/.keystore"
+                    export JAVA_OPTS="$JAVA_OPTS -Djavax.net.ssl.trustStorePassword=changeit"
+                done
+              fi
+
+              # The home directory template used by the container entrypoint.
+              # Needed to inject properties and extensions.
+              export GUACAMOLE_HOME=/tmp/guacamole
+              mkdir -p "${GUACAMOLE_HOME}"
+
+              # Configure extensions.
+              mkdir -p "${GUACAMOLE_HOME}/extensions"
+              [ -d "/extensions" ] && cp -r /extensions/. "${GUACAMOLE_HOME}/extensions"
+
+              # Configure lib.
+              mkdir -p "${GUACAMOLE_HOME}/lib"
+
+              # Workaround for https://github.com/apache/guacamole-client/pull/794
+              # not being backported to version 1.5.x.
+              printf "enable-environment-properties: true\n" > "${GUACAMOLE_HOME}/guacamole.properties"
+
+              # Run original entrypoint.
+              /opt/guacamole/bin/entrypoint.sh
+          env:
+            - name: GUACD_HOSTNAME
+              value: guacd
+            - name: GUACD_PORT
+              value: "4822"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /guacamole
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /guacamole
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guacamole
+  labels:
+    app.kubernetes.io/name: guacamole
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: guacamole
