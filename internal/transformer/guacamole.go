@@ -19,7 +19,7 @@ import (
 
 const (
 	GuacamoleDeploymentName = "guacamole"
-	extensionDLImage        = "ghcr.io/guacamole-operator/extension-dl:277d1ab"
+	extensionDLImage        = "ghcr.io/guacamole-operator/extension-dl:11e785e"
 )
 
 // Guacamole transform the guacamole deployment manifest.
