@@ -38,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
-	guacamoleoperatorgithubiov1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	guacclient "github.com/guacamole-operator/guacamole-operator/internal/client"
 	reconciler "github.com/guacamole-operator/guacamole-operator/internal/reconciler/connection"
 )
@@ -179,7 +178,7 @@ func (r *ConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&guacamoleoperatorgithubiov1alpha1.Connection{}).
+		For(&v1alpha1.Connection{}).
 		Watches(
 			&v1alpha1.Guacamole{},
 			r.watchGuacamoleRef(fieldToIndex),
@@ -286,19 +285,19 @@ func (r *ConnectionReconciler) getConnectionParams(ctx context.Context, obj *v1a
 
 	err := r.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, &secret)
 	if err != nil && k8serrors.IsNotFound(err) {
-		return nil, fmt.Errorf("Guacamole access parameters secret not found: %w", err)
+		return nil, fmt.Errorf("access parameters secret not found: %w", err)
 	}
 
 	errInvalidParamaters := errors.New("invalid parameters")
 
 	username, ok := secret.Data["username"]
 	if !ok {
-		return nil, fmt.Errorf("Guacamole username parameter missing: %w", errInvalidParamaters)
+		return nil, fmt.Errorf("username parameter missing: %w", errInvalidParamaters)
 	}
 
 	password, ok := secret.Data["password"]
 	if !ok {
-		return nil, fmt.Errorf("Guacamole password parameter missing: %w", errInvalidParamaters)
+		return nil, fmt.Errorf("password parameter missing: %w", errInvalidParamaters)
 	}
 
 	clientConfig.Username = string(username)

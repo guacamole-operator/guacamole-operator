@@ -19,8 +19,9 @@ package v1alpha1
 import (
 	"encoding/json"
 
-	"github.com/guacamole-operator/guacamole-operator/internal/client/gen"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/guacamole-operator/guacamole-operator/internal/client/gen"
 )
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
