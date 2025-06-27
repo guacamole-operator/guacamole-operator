@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
+	"github.com/guacamole-operator/guacamole-operator/internal/apierror"
 	guacclient "github.com/guacamole-operator/guacamole-operator/internal/client"
 	reconciler "github.com/guacamole-operator/guacamole-operator/internal/reconciler/connection"
 )
@@ -154,6 +156,14 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if err := r.Status().Update(ctx, connection); err != nil {
 			logger.Error(err, "Failed to update status.")
 			return ctrl.Result{}, err
+		}
+
+		// Don't trigger reconciler for Guacamole API errors.
+		var apiErr *apierror.APIError
+		if errors.As(err, &apiErr) {
+			return ctrl.Result{
+				RequeueAfter: time.Hour,
+			}, nil
 		}
 
 		return ctrl.Result{}, err
