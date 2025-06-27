@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
+	"github.com/guacamole-operator/guacamole-operator/internal/apierror"
 	"github.com/guacamole-operator/guacamole-operator/internal/client"
 	"github.com/guacamole-operator/guacamole-operator/internal/client/gen"
 	"github.com/guacamole-operator/guacamole-operator/internal/set"
@@ -414,7 +415,9 @@ func (r *Reconciler) addConnectionUsers(ctx context.Context, connectionID string
 		}
 
 		if response.StatusCode() != http.StatusNoContent {
-			return fmt.Errorf("could not add permissions of user %s on connection %s", user, connectionID)
+			return &apierror.APIError{
+				Err: fmt.Errorf("could not add permissions of user %s on connection %s", user, connectionID),
+			}
 		}
 	}
 
