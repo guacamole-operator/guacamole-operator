@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"log/slog"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -30,9 +31,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+
+	"github.com/go-logr/logr"
 
 	v1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/controllers"
@@ -61,13 +63,16 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	opts := slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.Level(-1),
+	}
+	handler := slog.NewJSONHandler(os.Stderr, &opts)
+
+	logger := logr.FromSlogHandler(handler)
+	ctrl.SetLogger(logger)
 
 	var err error
 	options := ctrl.Options{

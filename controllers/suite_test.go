@@ -17,9 +17,11 @@ limitations under the License.
 package controllers
 
 import (
+	"log/slog"
 	"path/filepath"
 	"testing"
 
+	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -28,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	guacamoleoperatorgithubiov1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	//+kubebuilder:scaffold:imports
@@ -50,7 +51,14 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+	opts := slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.Level(-1),
+	}
+	handler := slog.NewJSONHandler(GinkgoWriter, &opts)
+
+	logger := logr.FromSlogHandler(handler)
+	logf.SetLogger(logger)
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
