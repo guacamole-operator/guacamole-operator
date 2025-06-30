@@ -188,7 +188,7 @@ func (r *ConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.Connection{}).
+		For(&v1alpha1.Connection{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
 			&v1alpha1.Guacamole{},
 			r.watchGuacamoleRef(fieldToIndex),
