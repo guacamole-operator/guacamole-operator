@@ -175,7 +175,6 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		logger.Error(err, "Failed to update status.")
 		return ctrl.Result{}, err
 	}
-
 	logger.Info("Reconciled.")
 	return ctrl.Result{}, nil
 }
