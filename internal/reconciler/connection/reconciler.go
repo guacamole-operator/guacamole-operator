@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/internal/apierror"
@@ -18,12 +19,16 @@ import (
 type Reconciler struct {
 	// client for the Guacamole API.
 	client *client.Client
+
+	// Concurrency factor for Guacamole API calls.
+	concurrency int
 }
 
 // New instantiates a reconciler.
-func New(client *client.Client) *Reconciler {
+func New(client *client.Client, concurrency int) *Reconciler {
 	return &Reconciler{
-		client: client,
+		client:      client,
+		concurrency: concurrency,
 	}
 }
 
@@ -333,8 +338,6 @@ func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.C
 
 // getConnectionUsers returns all users with permissions on a connection.
 func (r *Reconciler) getConnectionUsers(ctx context.Context, connectionID string) ([]string, error) {
-	users := []string{}
-
 	// Query all users and their permissions. API has no ability to just return
 	// users with permissions on a connection.
 	//
@@ -342,35 +345,83 @@ func (r *Reconciler) getConnectionUsers(ctx context.Context, connectionID string
 
 	response, err := r.client.ListUsersWithResponse(ctx, r.client.Source)
 	if err != nil {
-		return users, err
+		return nil, err
 	}
 
 	if response.JSON200 == nil {
-		return users, errors.New("could not query users")
+		return nil, errors.New("could not query users")
+	}
+
+	userCount := len(*response.JSON200)
+	usersCh := make(chan string, userCount)
+	resultsCh := make(chan string, userCount)
+	errCh := make(chan error, 1)
+
+	var wg sync.WaitGroup
+	wg.Add(r.concurrency)
+
+	for range r.concurrency {
+		go func() {
+			defer wg.Done()
+			userPermissionWorker(ctx, r.client, connectionID, usersCh, resultsCh, errCh)
+		}()
 	}
 
 	for user := range *response.JSON200 {
 		if user == r.client.Username {
 			continue
 		}
+		usersCh <- user
+	}
+	close(usersCh)
 
-		response, err := r.client.GetUserPermissionsWithResponse(ctx, r.client.Source, user)
+	doneCh := make(chan struct{})
+	go func() {
+		wg.Wait()
+		doneCh <- struct{}{}
+	}()
+
+	var users []string
+	var errs error
+
+L:
+	for {
+		select {
+		case err := <-errCh:
+			errs = errors.Join(errs, err)
+		case user := <-resultsCh:
+			users = append(users, user)
+		case <-doneCh:
+			break L
+		}
+	}
+
+	return users, errs
+}
+
+// userPermissionWorker returns users who have the permissions on provided connection.
+func userPermissionWorker(ctx context.Context, client *client.Client, connectionID string,
+	usersCh <-chan string, resultsCh chan<- string, errCh chan<- error,
+) {
+	for user := range usersCh {
+		response, err := client.GetUserPermissionsWithResponse(ctx, client.Source, user)
 		if err != nil {
-			return users, err
+			errCh <- err
+			break
 		}
 
 		if response.JSON200 == nil {
-			return users, fmt.Errorf("could not get permissions of user %s", user)
+			errCh <- fmt.Errorf("could not get permissions of user %s", user)
+			continue
 		}
 
 		for id := range response.JSON200.ConnectionPermissions {
 			if id == connectionID {
-				users = append(users, user)
+				resultsCh <- user
+				break
 			}
 		}
 	}
-
-	return users, nil
 }
 
 // addConnectionUsers adds READ permissions of users on a connection.

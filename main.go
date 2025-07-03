@@ -57,11 +57,13 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var concurrency int
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager. "+
+		"Enabling this will ensure there is only one active controller manager.")
+	flag.IntVar(&concurrency, "concurrency", 100, "Number of concurrent requests to Guacamole API.")
 
 	flag.Parse()
 
@@ -116,8 +118,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.ConnectionReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		Concurrency: concurrency,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Connection")
 		os.Exit(1)

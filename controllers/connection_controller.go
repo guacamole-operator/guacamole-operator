@@ -47,7 +47,8 @@ import (
 // ConnectionReconciler reconciles a Connection object.
 type ConnectionReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme      *runtime.Scheme
+	Concurrency int
 }
 
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=connections,verbs=get;list;watch;create;update;patch;delete
@@ -106,7 +107,7 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Instantiate reconciler.
-	reconciler := reconciler.New(guacClient)
+	reconciler := reconciler.New(guacClient, r.Concurrency)
 
 	// Check if instance is marked to be deleted, which is
 	// indicated by the deletion timestamp being set. If so, process the
@@ -175,7 +176,6 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		logger.Error(err, "Failed to update status.")
 		return ctrl.Result{}, err
 	}
-
 	logger.Info("Reconciled.")
 	return ctrl.Result{}, nil
 }
