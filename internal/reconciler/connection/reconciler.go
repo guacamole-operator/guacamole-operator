@@ -331,6 +331,12 @@ func (r *Reconciler) resolveConnectionGroup(ctx context.Context, obj *v1alpha1.C
 	return currentParent, parents, nil
 }
 
+// User holds information for permissions on connection.
+type User struct {
+	User  string
+	Error error
+}
+
 // getConnectionUsers returns all users with permissions on a connection.
 func (r *Reconciler) getConnectionUsers(ctx context.Context, connectionID string) ([]string, error) {
 	users := []string{}
@@ -349,28 +355,61 @@ func (r *Reconciler) getConnectionUsers(ctx context.Context, connectionID string
 		return users, errors.New("could not query users")
 	}
 
+	userCount := len(*response.JSON200)
+	userJobs := make(chan string, userCount)
+	results := make(chan User, userCount)
+
+	const workerNum = 30
+	for w := 1; w <= workerNum; w++ {
+		go userPermissionWorker(ctx, r.client, connectionID, userJobs, results)
+	}
+
+	jobsSent := 0
 	for user := range *response.JSON200 {
 		if user == r.client.Username {
 			continue
 		}
+		userJobs <- user
+		jobsSent++
+	}
+	defer close(userJobs)
 
-		response, err := r.client.GetUserPermissionsWithResponse(ctx, r.client.Source, user)
-		if err != nil {
+	for i := 1; i <= jobsSent; i++ {
+		user := <-results
+		if user.Error != nil {
 			return users, err
+		}
+		// Only add users with permissions on connection.
+		if user.User != "" {
+			users = append(users, user.User)
+		}
+	}
+	close(results)
+
+	return users, nil
+}
+
+// userPermissionWorker returns users who have the permissions on provided connection.
+func userPermissionWorker(ctx context.Context, client *client.Client, connectionID string, users <-chan string, results chan<- User) {
+	for user := range users {
+		matchedUser := User{}
+		response, err := client.GetUserPermissionsWithResponse(ctx, client.Source, user)
+		if err != nil {
+			matchedUser.Error = err
 		}
 
 		if response.JSON200 == nil {
-			return users, fmt.Errorf("could not get permissions of user %s", user)
+			matchedUser.Error = fmt.Errorf("could not get permissions of user %s", user)
 		}
 
 		for id := range response.JSON200.ConnectionPermissions {
 			if id == connectionID {
-				users = append(users, user)
+				matchedUser.User = user
+				matchedUser.Error = nil
 			}
 		}
+		results <- matchedUser
 	}
-
-	return users, nil
 }
 
 // addConnectionUsers adds READ permissions of users on a connection.
