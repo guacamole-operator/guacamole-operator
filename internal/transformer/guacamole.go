@@ -192,7 +192,20 @@ func postgresInitContainer(guacImage string) []corev1.Container {
 		Args: []string{
 			"-c",
 			`export PGPASSWORD=$POSTGRESQL_PASSWORD
-psql -h $POSTGRESQL_HOSTNAME -d $POSTGRESQL_DATABASE -U $POSTGRESQL_USER -p $POSTGRESQL_PORT -a -w -f /data/initdb.sql || true`,
+MAX_RETRIES=20
+i=1
+while [ "$i" -le $MAX_RETRIES ]
+do
+    if pg_isready -h $POSTGRESQL_HOSTNAME -d $POSTGRESQL_DATABASE -U $POSTGRESQL_USER -p $POSTGRESQL_PORT; then
+        echo "Database is ready to accept connections."
+        psql -h $POSTGRESQL_HOSTNAME -d $POSTGRESQL_DATABASE -U $POSTGRESQL_USER -p $POSTGRESQL_PORT -a -w -f /data/initdb.sql || true
+        exit 0
+    fi
+    echo "Waiting for PG database."
+    sleep 5
+    i=$((i + 1))
+done
+exit 1`,
 		},
 	}
 
