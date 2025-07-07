@@ -22,6 +22,9 @@ linters:
           alias: corev1
         - pkg: k8s.io/apimachinery/pkg/apis/meta/v1
           alias: metav1
+    mnd:
+      ignored-functions:
+        - '^flag\.'
     revive:
       rules:
         - name: dot-imports
