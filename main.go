@@ -38,6 +38,7 @@ import (
 
 	v1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/controllers"
+	"github.com/guacamole-operator/guacamole-operator/internal/config"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -57,13 +58,36 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
-	var concurrency int
+	var connectionConcurrentReconciles int
+	var guacConcurrency int
+	var usePriorityQueue bool
 
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager. "+
-		"Enabling this will ensure there is only one active controller manager.")
-	flag.IntVar(&concurrency, "concurrency", 100, "Number of concurrent requests to Guacamole API.")
+	flag.StringVar(&metricsAddr, "metrics-bind-address",
+		config.EnvOrDefault("METRICS_BIND_ADDRESS", ":8080"),
+		"The address the metric endpoint binds to.")
+
+	flag.StringVar(&probeAddr, "health-probe-bind-address",
+		config.EnvOrDefault("HEALTH_PROBE_BIND_ADDRESS", ":8081"),
+		"The address the probe endpoint binds to.")
+
+	flag.BoolVar(&enableLeaderElection, "leader-elect",
+		config.EnvBoolOrDefault("LEADER_ELECT", false),
+		"Enable leader election for controller manager. "+
+			"Enabling this will ensure there is only one active controller manager.")
+
+	//nolint:mnd
+	flag.IntVar(&connectionConcurrentReconciles, "connectionConcurrentReconciles",
+		config.EnvIntOrDefault("CONNECTION_CONCURRENT_RECONCILES", 10),
+		"Number of concurrent reconciles for connection resources.")
+
+	//nolint:mnd
+	flag.IntVar(&guacConcurrency, "guac-concurrency",
+		config.EnvIntOrDefault("GUAC_CONCURRENCY", 100),
+		"Number of concurrent requests to the Guacamole API.")
+
+	flag.BoolVar(&usePriorityQueue, "priority-queue",
+		config.EnvBoolOrDefault("PRIORITY_QUEUE", false),
+		"Use controller-runtime's priority queue implementation.")
 
 	flag.Parse()
 
@@ -118,9 +142,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.ConnectionReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		Concurrency: concurrency,
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		ConcurrentReconciles: connectionConcurrentReconciles,
+		GuacConcurrency:      guacConcurrency,
+		UsePriorityQueue:     usePriorityQueue,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Connection")
 		os.Exit(1)

@@ -32,6 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -47,8 +48,10 @@ import (
 // ConnectionReconciler reconciles a Connection object.
 type ConnectionReconciler struct {
 	client.Client
-	Scheme      *runtime.Scheme
-	Concurrency int
+	Scheme               *runtime.Scheme
+	ConcurrentReconciles int
+	GuacConcurrency      int
+	UsePriorityQueue     bool
 }
 
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=connections,verbs=get;list;watch;create;update;patch;delete
@@ -107,7 +110,7 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Instantiate reconciler.
-	reconciler := reconciler.New(guacClient, r.Concurrency)
+	reconciler := reconciler.New(guacClient, r.GuacConcurrency)
 
 	// Check if instance is marked to be deleted, which is
 	// indicated by the deletion timestamp being set. If so, process the
@@ -194,6 +197,10 @@ func (r *ConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			r.watchGuacamoleRef(fieldToIndex),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: r.ConcurrentReconciles,
+			UsePriorityQueue:        &r.UsePriorityQueue,
+		}).
 		Complete(r)
 }
 
