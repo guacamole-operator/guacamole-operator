@@ -76,7 +76,7 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 
 	//nolint:mnd
-	flag.IntVar(&connectionConcurrentReconciles, "connectionConcurrentReconciles",
+	flag.IntVar(&connectionConcurrentReconciles, "connection-concurrent-reconciles",
 		config.EnvIntOrDefault("CONNECTION_CONCURRENT_RECONCILES", 10),
 		"Number of concurrent reconciles for connection resources.")
 
