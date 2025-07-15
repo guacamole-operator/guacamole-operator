@@ -25,7 +25,7 @@ metadata:
 spec:
   containers:
     - name: guacd
-      image: docker.io/guacamole/guacd:latest
+      image: docker.io/guacamole/guacd:1.6.0
       ports:
         - name: guacd
           containerPort: 4822
@@ -106,9 +106,20 @@ spec:
               i=$((i + 1))
           done
           exit 1
+    - name: cloudevents
+      image: ghcr.io/guacamole-operator/guacamole-extensions/cloudevents:0.3.0
+      command:
+        - /bin/sh
+      args:
+        - -c
+        - |
+          cp /*.jar /extensions/
+      volumeMounts:
+        - name: extensions
+          mountPath: /extensions
   containers:
     - name: guacamole
-      image: docker.io/guacamole/guacamole:latest
+      image: docker.io/guacamole/guacamole:1.6.0
       command:
         - /bin/bash
       args:
@@ -199,14 +210,23 @@ spec:
           containerPort: 8080
           protocol: TCP
           hostPort: 8080
+        - name: ws
+          containerPort: 8081
+          protocol: TCP
+          hostPort: 8081
       livenessProbe:
         httpGet:
           path: /guacamole
           port: http
         initialDelaySeconds: 10
         periodSeconds: 5
+      volumeMounts:
+        - name: extensions
+          mountPath: /extensions
   volumes:
     - name: initdb
+      emptyDir: {}
+    - name: extensions
       emptyDir: {}
 ---
 apiVersion: v1
