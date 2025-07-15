@@ -27,11 +27,14 @@ func New(url string) *Client {
 }
 
 // Read WebSocket messages from the wire. Has to be executed in a goroutine.
-func (c *Client) Read(msgCh chan<- []byte, errCh chan<- error) {
+func (c *Client) Read(ctx context.Context, msgCh chan<- []byte, errCh chan<- error) {
 	for {
+		if err := ctx.Err(); err != nil {
+			break
+		}
+
 		if !c.isConnected() {
-			err := c.Connect()
-			if err != nil {
+			if err := c.Connect(); err != nil {
 				errCh <- err
 			}
 
@@ -45,10 +48,13 @@ func (c *Client) Read(msgCh chan<- []byte, errCh chan<- error) {
 
 		_, b, err := c.conn.Read(context.Background())
 		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				break
+			}
+
 			errCh <- fmt.Errorf("error reading from websocket connection: %w", err)
 
-			err := c.Connect()
-			if err != nil {
+			if err := c.Connect(); err != nil {
 				errCh <- err
 			}
 
@@ -78,13 +84,11 @@ func (c *Client) Close() error {
 
 // Connect creates the WebSocket connection.
 func (c *Client) Connect() error {
-	err := c.Close()
-	if err != nil {
+	if err := c.Close(); err != nil {
 		return err
 	}
 
-	ctx := context.Background()
-	conn, _, err := websocket.Dial(ctx, c.url, nil)
+	conn, _, err := websocket.Dial(context.Background(), c.url, nil)
 	if err != nil {
 		return err
 	}
