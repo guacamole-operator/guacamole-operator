@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -34,10 +35,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/internal/apierror"
@@ -48,9 +51,10 @@ import (
 // ConnectionReconciler reconciles a Connection object.
 type ConnectionReconciler struct {
 	client.Client
-	Scheme               *runtime.Scheme
 	ConcurrentReconciles int
 	GuacConcurrency      int
+	GuacEventCh          <-chan GuacamoleWrappedEvent
+	Scheme               *runtime.Scheme
 	UsePriorityQueue     bool
 }
 
@@ -197,6 +201,9 @@ func (r *ConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			r.watchGuacamoleRef(fieldToIndex),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
+		WatchesRawSource(
+			source.Channel(r.GuacEventCh, r.guacamoleEventHandler(fieldToIndex)),
+		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: r.ConcurrentReconciles,
 			UsePriorityQueue:        &r.UsePriorityQueue,
@@ -239,11 +246,9 @@ func (r *ConnectionReconciler) watchGuacamoleRef(indexField string) handler.Even
 // an event of a corresponding Guacamole resource.
 func (r *ConnectionReconciler) guacamoleRequestMapFunc(indexField string) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
-		requests := []reconcile.Request{}
-
 		guacamole, ok := obj.(*v1alpha1.Guacamole)
 		if !ok {
-			return requests
+			return nil
 		}
 
 		// Get all relevant connections.
@@ -254,10 +259,59 @@ func (r *ConnectionReconciler) guacamoleRequestMapFunc(indexField string) handle
 
 		var connections v1alpha1.ConnectionList
 		if err := r.List(ctx, &connections, listOpts); err != nil {
-			return requests
+			return nil
 		}
 
+		var requests []reconcile.Request
+
 		for _, c := range connections.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      c.GetName(),
+					Namespace: c.GetNamespace(),
+				},
+			})
+		}
+
+		return requests
+	}
+}
+
+type (
+	GuacamoleEvent interface {
+		Name() string
+		Namespace() string
+		Username() string
+	}
+
+	GuacamoleWrappedEvent = event.TypedGenericEvent[GuacamoleEvent]
+	guacamoleEventMapFunc = handler.TypedMapFunc[GuacamoleEvent, reconcile.Request]
+	guacamoleEventHandler = handler.TypedEventHandler[GuacamoleEvent, reconcile.Request]
+)
+
+func (r *ConnectionReconciler) guacamoleEventHandler(indexField string) guacamoleEventHandler {
+	return handler.TypedEnqueueRequestsFromMapFunc(r.guacamoleEventRequestMapFunc(indexField))
+}
+
+func (r *ConnectionReconciler) guacamoleEventRequestMapFunc(indexField string) guacamoleEventMapFunc {
+	return func(ctx context.Context, obj GuacamoleEvent) []reconcile.Request {
+		listOpts := &client.ListOptions{
+			FieldSelector: fields.OneTermEqualSelector(indexField, obj.Name()),
+			Namespace:     obj.Namespace(),
+		}
+
+		var connections v1alpha1.ConnectionList
+		if err := r.List(ctx, &connections, listOpts); err != nil {
+			return nil
+		}
+
+		var requests []reconcile.Request
+
+		for _, c := range connections.Items {
+			if !slices.Contains(c.Spec.Permissions.Users, v1alpha1.ConnectionUser{ID: obj.Username()}) {
+				continue
+			}
+
 			requests = append(requests, reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      c.GetName(),
