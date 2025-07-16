@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"os"
@@ -39,6 +40,7 @@ import (
 	v1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/controllers"
 	"github.com/guacamole-operator/guacamole-operator/internal/config"
+	"github.com/guacamole-operator/guacamole-operator/internal/listener"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -60,6 +62,7 @@ func main() {
 	var probeAddr string
 	var connectionConcurrentReconciles int
 	var guacConcurrency int
+	var enableGuacEventListener bool
 	var usePriorityQueue bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address",
@@ -85,12 +88,17 @@ func main() {
 		config.EnvIntOrDefault("GUAC_CONCURRENCY", 100),
 		"Number of concurrent requests to the Guacamole API.")
 
+	flag.BoolVar(&enableGuacEventListener, "guac-event-listener",
+		config.EnvBoolOrDefault("GUAC_EVENT_LISTENER", false),
+		"Enable Guacamole CloudEvent listener.")
+
 	flag.BoolVar(&usePriorityQueue, "priority-queue",
 		config.EnvBoolOrDefault("PRIORITY_QUEUE", false),
 		"Use controller-runtime's priority queue implementation.")
 
 	flag.Parse()
 
+	// Configure logging.
 	opts := slog.HandlerOptions{
 		AddSource: true,
 		Level:     slog.Level(-1),
@@ -100,6 +108,23 @@ func main() {
 	logger := logr.FromSlogHandler(handler)
 	ctrl.SetLogger(logger)
 
+	// Configure and start event listener if enabled.
+	eventListener := &listener.Listener{}
+	triggerCh := make(chan controllers.GuacamoleWrappedEvent, 1)
+	if enableGuacEventListener {
+		ctx, cancel := context.WithCancel(context.Background())
+		doneCh := make(chan struct{})
+		errCh := make(chan error, 1)
+
+		defer func() {
+			cancel()
+			<-doneCh
+		}()
+
+		go eventListener.Listen(ctx, triggerCh, errCh, doneCh)
+	}
+
+	// Setup controller manager.
 	var err error
 	options := ctrl.Options{
 		Scheme: scheme,
@@ -110,17 +135,6 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "643bc562.guacamole-operator.github.io",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
 	}
 
 	// Set watch namespace. Defaults to cluster scope.
@@ -134,19 +148,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Setup reconcilers.
 	if err = (&controllers.GuacamoleReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		EnableListener: enableGuacEventListener,
+		Listener:       eventListener,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Guacamole")
 		os.Exit(1)
 	}
+
 	if err = (&controllers.ConnectionReconciler{
 		Client:               mgr.GetClient(),
 		Scheme:               mgr.GetScheme(),
 		ConcurrentReconciles: connectionConcurrentReconciles,
 		GuacConcurrency:      guacConcurrency,
 		UsePriorityQueue:     usePriorityQueue,
+		GuacEventCh:          triggerCh,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Connection")
 		os.Exit(1)
