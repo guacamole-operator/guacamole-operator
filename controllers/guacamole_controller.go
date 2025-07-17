@@ -17,21 +17,31 @@ limitations under the License.
 package controllers
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/kubebuilder-declarative-pattern/pkg/patterns/addon"
 	"sigs.k8s.io/kubebuilder-declarative-pattern/pkg/patterns/addon/pkg/status"
 	"sigs.k8s.io/kubebuilder-declarative-pattern/pkg/patterns/declarative"
 
-	guacamolev1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
+	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/internal/transformer"
 )
+
+// guacamoleFinalizer is the arbitrary string representing the resource's finalizer.
+const guacamoleFinalizer = "guacamole.guacamole-operator.github.io/finalizer"
 
 var _ reconcile.Reconciler = &GuacamoleReconciler{}
 
@@ -39,10 +49,18 @@ var _ reconcile.Reconciler = &GuacamoleReconciler{}
 type GuacamoleReconciler struct {
 	declarative.Reconciler
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log            logr.Logger
+	Scheme         *runtime.Scheme
+	EnableListener bool
+	Listener       Listener
+	watchLabels    declarative.LabelMaker
+}
 
-	watchLabels declarative.LabelMaker
+// Listener defines an interface for a Guacamole CloudEvent listener.
+type Listener interface {
+	Add(namespace, name, url string)
+	Remove(namespace, name string)
+	Listen(ctx context.Context, eventCh chan<- GuacamoleWrappedEvent, errCh chan<- error, doneCh chan<- struct{})
 }
 
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=guacamoles,verbs=get;list;watch;create;update;patch;delete
@@ -59,7 +77,7 @@ type GuacamoleReconciler struct {
 func (r *GuacamoleReconciler) setupReconciler(mgr ctrl.Manager) error {
 	r.watchLabels = declarative.SourceLabel(mgr.GetScheme())
 
-	return r.Init(mgr, &guacamolev1alpha1.Guacamole{},
+	return r.Init(mgr, &v1alpha1.Guacamole{},
 		declarative.WithOwner(declarative.SourceAsOwner),
 		declarative.WithLabels(r.watchLabels),
 		declarative.WithStatus(status.NewKstatusCheck(mgr.GetClient(), &r.Reconciler)),
@@ -86,7 +104,7 @@ func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Watch for changes to Guacamole
-	err = c.Watch(source.Kind(mgr.GetCache(), &guacamolev1alpha1.Guacamole{}, &handler.TypedEnqueueRequestForObject[*guacamolev1alpha1.Guacamole]{}))
+	err = c.Watch(source.Kind(mgr.GetCache(), &v1alpha1.Guacamole{}, &handler.TypedEnqueueRequestForObject[*v1alpha1.Guacamole]{}))
 	if err != nil {
 		return err
 	}
@@ -98,4 +116,95 @@ func (r *GuacamoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return nil
+}
+
+// Reconcile runs the declarative.Reconciler logic and adds custom finalizer logic.
+func (r *GuacamoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	// Fetch instance.
+	instance := &v1alpha1.Guacamole{}
+	if err := r.Get(ctx, req.NamespacedName, instance); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			return ctrl.Result{}, nil
+		}
+
+		// Error reading the object - requeue the request.
+		logger.Error(err, "Failed to get instance.")
+		return ctrl.Result{}, err
+	}
+
+	isMarkedToBeDeleted := instance.GetDeletionTimestamp() != nil
+	if isMarkedToBeDeleted {
+		if controllerutil.ContainsFinalizer(instance, guacamoleFinalizer) {
+			r.Listener.Remove(instance.GetNamespace(), instance.GetName())
+
+			if controllerutil.RemoveFinalizer(instance, guacamoleFinalizer) {
+				if err := r.Update(ctx, instance); err != nil {
+					// Error updating the object - requeue the request.
+					logger.Error(err, "Failed to update instance after removing finalizer.")
+					return ctrl.Result{}, err
+				}
+			}
+
+			logger.Info("Instance finalized.")
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Instance is not marked for deletion, add finalizer.
+	if !controllerutil.ContainsFinalizer(instance, guacamoleFinalizer) {
+		logger.Info("Add finalizer.")
+		controllerutil.AddFinalizer(instance, guacamoleFinalizer)
+		if err := r.Update(ctx, instance); err != nil {
+			// Error updating the object - requeue the request.
+			logger.Error(err, "Failed to update instance after adding finalizer")
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Run declarative.Reconiler logic.
+	result, err := r.Reconciler.Reconcile(ctx, req)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// If instance is marked to have the cloudevents extension,
+	// add it to the listener instance.
+	_, ok := instance.GetAnnotations()["extension.guacamole-operator.github.io/cloudevents"]
+	if ok && r.EnableListener {
+		instanceURL, err := r.findWebSocketURL(ctx, instance)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error finding WebSocket URL: %w", err)
+		}
+
+		r.Listener.Add(instance.GetNamespace(), instance.GetName(), instanceURL)
+	}
+
+	return result, nil
+}
+
+// findWebSocketURL retrieves access parameters for the WebSocket API provided
+// by the custom Guacamole `cloudevents` extension.
+func (r *GuacamoleReconciler) findWebSocketURL(ctx context.Context, obj *v1alpha1.Guacamole) (string, error) {
+	name := fmt.Sprintf("guacamole-%s", obj.GetName())
+
+	var svc corev1.Service
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: obj.GetNamespace()}, &svc); err != nil {
+		return "", err
+	}
+
+	var wsPort *corev1.ServicePort
+	for _, p := range svc.Spec.Ports {
+		if p.Name == "ws" {
+			wsPort = &p
+		}
+	}
+
+	if wsPort == nil {
+		return "", fmt.Errorf("no port with name 'ws' found")
+	}
+
+	url := fmt.Sprintf("ws://guacamole-%s.%s.svc.cluster.local:%d", obj.GetName(), obj.GetNamespace(), wsPort.Port)
+	return url, nil
 }
