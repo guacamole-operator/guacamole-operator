@@ -304,7 +304,6 @@ func applyExtensions(extensions []v1alpha1.Extension, m *manifest.Objects) error
 			}
 
 			// Apply init container for extension download.
-			// TODO: Append instead of replace.
 			downloaderContainer := corev1.Container{
 				Name:  "extension-dl",
 				Image: extensionDLImage,
@@ -320,7 +319,10 @@ func applyExtensions(extensions []v1alpha1.Extension, m *manifest.Objects) error
 				downloaderContainer.Env = append(downloaderContainer.Env, v)
 			}
 
-			deployment.Spec.Template.Spec.InitContainers = []corev1.Container{downloaderContainer}
+			deployment.Spec.Template.Spec.InitContainers = append(
+				deployment.Spec.Template.Spec.InitContainers,
+				downloaderContainer,
+			)
 
 			// Mount emptyDir volume to place extensions.
 			ensureVolume(&deployment, corev1.Volume{
