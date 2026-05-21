@@ -19,7 +19,9 @@ import (
 
 const (
 	GuacamoleDeploymentName = "guacamole"
-	extensionDLImage        = "ghcr.io/guacamole-operator/extension-dl:11e785e"
+	extensionDLImage        = "ghcr.io/guacamole-operator/extension-dl:07695df"
+	initDBVolumeName        = "initdb"
+	extensionsVolumeName    = "extensions"
 )
 
 // Guacamole transform the guacamole deployment manifest.
@@ -130,7 +132,7 @@ func applyPostgresConfiguration(guac *v1alpha1.Guacamole, m *manifest.Objects) e
 			deployment.Spec.Template.Spec.InitContainers[1].Env = envVarFromParameters(guac.Spec.Auth.Postgres.Parameter)
 
 			deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, corev1.Volume{
-				Name: "initdb",
+				Name: initDBVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
@@ -164,7 +166,7 @@ func postgresInitContainer(guacImage string) []corev1.Container {
 		Image: guacImage,
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "initdb",
+				Name:      initDBVolumeName,
 				MountPath: "/data",
 			},
 		},
@@ -182,7 +184,7 @@ func postgresInitContainer(guacImage string) []corev1.Container {
 		Image: "docker.io/library/postgres:alpine",
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "initdb",
+				Name:      initDBVolumeName,
 				MountPath: "/data",
 			},
 		},
@@ -326,20 +328,20 @@ func applyExtensions(extensions []v1alpha1.Extension, m *manifest.Objects) error
 
 			// Mount emptyDir volume to place extensions.
 			ensureVolume(&deployment, corev1.Volume{
-				Name: "extensions",
+				Name: extensionsVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			})
 
 			ensureInitContainerVolumeMount(&deployment, "extension-dl", corev1.VolumeMount{
-				Name: "extensions",
+				Name: extensionsVolumeName,
 				// GUACAMOLE_HOME=/tmp/guacamole required.
 				MountPath: "/extensions",
 			})
 
 			ensureContainerVolumeMount(&deployment, "guacamole", corev1.VolumeMount{
-				Name:      "extensions",
+				Name:      extensionsVolumeName,
 				ReadOnly:  true,
 				MountPath: "/extensions",
 			})
