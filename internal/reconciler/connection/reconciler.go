@@ -3,11 +3,14 @@ package connection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/internal/client"
 	"github.com/guacamole-operator/guacamole-operator/internal/client/gen"
+	"github.com/guacamole-operator/guacamole-operator/internal/feature"
 )
 
 // Reconciler for the connection resource.
@@ -17,13 +20,21 @@ type Reconciler struct {
 
 	// Concurrency factor for Guacamole API calls.
 	concurrency int
+
+	// Feature flags.
+	features feature.Flag
+
+	// Prefix for created user groups if the feature enabled.
+	userGroupPrefix string
 }
 
 // New instantiates a reconciler.
-func New(client *client.Client, concurrency int) *Reconciler {
+func New(client *client.Client, concurrency int, feature feature.Flag, userGroupPrefix string) *Reconciler {
 	return &Reconciler{
-		client:      client,
-		concurrency: concurrency,
+		client:          client,
+		concurrency:     concurrency,
+		features:        feature,
+		userGroupPrefix: userGroupPrefix,
 	}
 }
 
@@ -117,20 +128,45 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 
 	identifier := *obj.Status.Identifier
 
-	// Sync user permissions on a connection and all parent connection groups.
-	err = r.syncUserPermissions(ctx, syncUserPermissionsParams{
-		connectionID: identifier,
-		users:        obj.Spec.Permissions.Users,
-		parents:      parents,
-	})
-	if err != nil {
-		return err
+	// Add user based permissions on a connection.
+	// Grant access on the connection and all parent connection groups
+	// for each requested user.
+	if r.features.Has(feature.SyncConnectionToUser) {
+		// Sync user permissions on a connection and all parent connection groups.
+		err := r.syncUserPermissions(ctx, syncUserPermissionsParams{
+			connectionID: identifier,
+			users:        obj.Spec.Permissions.Users,
+			parents:      parents,
+		})
+		if err != nil {
+			return err
+		}
 	}
 
-	// Sync permissions of user group on a connection and all parent connection groups.
+	userGroups := obj.Spec.Permissions.Groups
+
+	// Add permissions on a connection based on the user groups.
+	// Create a user group with the same name as connection and grant access
+	// to the connection and all parent connection groups. Furthermore add all
+	// requested users to the user group.
+	if r.features.Has(feature.SyncConnectionToUserGroup) {
+		// Prefix the user group to be skipped from permissions checks.
+		name := prefixedName(r.userGroupPrefix, obj.Name)
+
+		err := r.syncUserGroup(ctx, name, obj.Spec.Permissions.Users)
+		if err != nil {
+			return err
+		}
+
+		userGroups = append(userGroups, v1alpha1.ConnectionGroup{
+			ID: name,
+		})
+	}
+
+	// Sync permissions of requested user groups on a connection and all parent connection groups.
 	err = r.syncUserGroupPermissions(ctx, syncUserGroupPermissionsParams{
 		connectionID: identifier,
-		groups:       obj.Spec.Permissions.Groups,
+		groups:       userGroups,
 		parents:      parents,
 	})
 	if err != nil {
@@ -147,21 +183,16 @@ func (r *Reconciler) Delete(ctx context.Context, obj *v1alpha1.Connection) error
 		return nil
 	}
 
-	response, err := r.client.DeleteConnectionWithResponse(ctx, r.client.Source, *obj.Status.Identifier)
-	if err != nil {
-		return err
+	// Remove the user group if the feature enabled.
+	if r.features.Has(feature.SyncConnectionToUserGroup) {
+		name := prefixedName(r.userGroupPrefix, obj.Name)
+		err := r.client.RemoveUserGroup(ctx, name)
+		if err != nil {
+			return err
+		}
 	}
 
-	// Assumption that resource is already deleted.
-	if response.StatusCode() == http.StatusNotFound {
-		return nil
-	}
-
-	if response.StatusCode() != http.StatusNoContent {
-		return errors.New("could not delete connection")
-	}
-
-	return nil
+	return r.client.RemoveConnection(ctx, *obj.Status.Identifier)
 }
 
 type syncUserPermissionsParams struct {
@@ -196,5 +227,46 @@ func (r *Reconciler) syncUserGroupPermissions(ctx context.Context, params syncUs
 		requestedUserGroups = append(requestedUserGroups, group.ID)
 	}
 
-	return r.client.SyncUserGroupPermissions(ctx, requestedUserGroups, params.connectionID, params.parents)
+	var filters []client.Filter
+
+	// User group sync feature enabled, filter all generated groups exept
+	// the generated user group for current connection.
+	if r.features.Has(feature.SyncConnectionToUserGroup) {
+		f := func(ug gen.UserGroups) gen.UserGroups {
+			for _, g := range ug {
+				if strings.HasPrefix(g.Identifier, r.userGroupPrefix) {
+					delete(ug, g.Identifier)
+				}
+			}
+
+			return ug
+		}
+
+		filters = append(filters, f)
+	}
+
+	return r.client.SyncUserGroupPermissions(ctx, client.SyncUserGroupPermissionsParams{
+		ConnID:  params.connectionID,
+		Parents: params.parents,
+		Groups:  requestedUserGroups,
+	}, filters...)
+}
+
+func (r *Reconciler) syncUserGroup(ctx context.Context, name string, users []v1alpha1.ConnectionUser) error {
+	requestedUsers := make([]string, 0, len(users))
+	for _, user := range users {
+		requestedUsers = append(requestedUsers, user.ID)
+	}
+
+	// Synchronize user group and group members.
+	err := r.client.SyncUserGroupAndMembers(ctx, name, requestedUsers)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func prefixedName(prefix string, name string) string {
+	return fmt.Sprintf("%s-%s", prefix, name)
 }

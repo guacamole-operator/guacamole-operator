@@ -45,6 +45,7 @@ import (
 	"github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/internal/apierror"
 	guacclient "github.com/guacamole-operator/guacamole-operator/internal/client"
+	"github.com/guacamole-operator/guacamole-operator/internal/feature"
 	reconciler "github.com/guacamole-operator/guacamole-operator/internal/reconciler/connection"
 )
 
@@ -56,6 +57,8 @@ type ConnectionReconciler struct {
 	GuacEventCh          <-chan GuacamoleWrappedEvent
 	Scheme               *runtime.Scheme
 	UsePriorityQueue     bool
+	Features             feature.Flag
+	UserGroupPrefix      string
 }
 
 // +kubebuilder:rbac:groups=guacamole-operator.github.io,resources=connections,verbs=get;list;watch;create;update;patch;delete
@@ -114,7 +117,7 @@ func (r *ConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Instantiate reconciler.
-	reconciler := reconciler.New(guacClient, r.GuacConcurrency)
+	reconciler := reconciler.New(guacClient, r.GuacConcurrency, r.Features, r.UserGroupPrefix)
 
 	// Check if instance is marked to be deleted, which is
 	// indicated by the deletion timestamp being set. If so, process the

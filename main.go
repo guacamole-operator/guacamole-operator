@@ -18,9 +18,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log/slog"
 	"os"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -40,6 +42,7 @@ import (
 	v1alpha1 "github.com/guacamole-operator/guacamole-operator/api/v1alpha1"
 	"github.com/guacamole-operator/guacamole-operator/controllers"
 	"github.com/guacamole-operator/guacamole-operator/internal/config"
+	"github.com/guacamole-operator/guacamole-operator/internal/feature"
 	"github.com/guacamole-operator/guacamole-operator/internal/listener"
 	//+kubebuilder:scaffold:imports
 )
@@ -64,6 +67,9 @@ func main() {
 	var guacConcurrency int
 	var enableGuacEventListener bool
 	var usePriorityQueue bool
+	var featureSyncConnectionToUser bool
+	var featureSyncConnectionToUserGroup bool
+	var userGroupPrefix string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address",
 		config.EnvOrDefault("METRICS_BIND_ADDRESS", ":8080"),
@@ -96,7 +102,30 @@ func main() {
 		config.EnvBoolOrDefault("PRIORITY_QUEUE", false),
 		"Use controller-runtime's priority queue implementation.")
 
+	flag.BoolVar(&featureSyncConnectionToUser, "guac-feature-sync-connection-to-user",
+		config.EnvBoolOrDefault("GUAC_FEATURE_SYNC_CONNECTION_TO_USER", true),
+		"Enable Guacamole feature to synchronize the connection to the user.")
+
+	flag.BoolVar(&featureSyncConnectionToUserGroup, "guac-feature-sync-connection-to-user-group",
+		config.EnvBoolOrDefault("GUAC_FEATURE_SYNC_CONNECTION_TO_USER_GROUP", false),
+		"Enable Guacamole feature to synchronize the connection to the user group.")
+
+	flag.StringVar(&userGroupPrefix, "guac-user-group-prefix",
+		config.EnvOrDefault("GUAC_USER_GROUP_PREFIX", "operator-managed"),
+		"The user group prefix for user groups synced with the connection if feature is enabled.")
+
 	flag.Parse()
+
+	// User group prefix may not be empty for enabled user group sync feature.
+	if featureSyncConnectionToUserGroup && len(strings.TrimSpace(userGroupPrefix)) == 0 {
+		err := errors.New("userGroupPrefix is empty by enabled feature for user group synchronization")
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	featureFlags := feature.Flag{}
+	featureFlags.Set(feature.SyncConnectionToUser, featureSyncConnectionToUser)
+	featureFlags.Set(feature.SyncConnectionToUserGroup, featureSyncConnectionToUserGroup)
 
 	// Configure logging.
 	opts := slog.HandlerOptions{
@@ -165,6 +194,8 @@ func main() {
 		ConcurrentReconciles: connectionConcurrentReconciles,
 		GuacConcurrency:      guacConcurrency,
 		UsePriorityQueue:     usePriorityQueue,
+		Features:             featureFlags,
+		UserGroupPrefix:      userGroupPrefix,
 		GuacEventCh:          triggerCh,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Connection")

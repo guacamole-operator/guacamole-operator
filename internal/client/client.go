@@ -235,12 +235,115 @@ func (c *Client) ConnectionExistsInGroup(ctx context.Context, parent string, con
 	return exists, identifier, nil
 }
 
+// SyncUserGroup synchronizes a user group. If the group already exists, keep it unchanged.
+func (c Client) SyncUserGroupAndMembers(ctx context.Context, group string, users []string) error {
+	// Get current users within group if exists.
+	response, err := c.ListUserGroupMembersWithResponse(ctx, c.Source, group)
+	if err != nil {
+		return err
+	}
+
+	status := response.StatusCode()
+
+	if status != http.StatusOK && status != http.StatusNotFound {
+		return errors.New("error checking a user group and members")
+	}
+
+	// Get list of the user group members, if the group already exists.
+	currentMembers := set.New()
+	if status == http.StatusOK {
+		if response.JSON200 == nil {
+			return fmt.Errorf("could not fetch members of the group %s", group)
+		}
+
+		for _, u := range *response.JSON200 {
+			currentMembers.Add(u)
+		}
+	}
+
+	// Group doesn't exist. Create a group.
+	if response.StatusCode() == http.StatusNotFound {
+		resp, err := c.CreateUserGroupWithResponse(ctx, c.Source, gen.CreateUserGroupJSONRequestBody{
+			Identifier: group,
+			Disabled:   false,
+		})
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode() != http.StatusOK {
+			return errors.New("error creating a group")
+		}
+	}
+
+	requestedMembers := set.FromSlice(users)
+
+	usersToAdd := set.Difference(requestedMembers, currentMembers)
+	usersToDelete := set.Difference(currentMembers, requestedMembers)
+
+	// If the list of the users to add/delete is empty, keep group unchanged.
+	if usersToAdd.Len() == 0 && usersToDelete.Len() == 0 {
+		return nil
+	}
+
+	var membersPatch gen.ModifyUserGroupMembersJSONRequestBody
+	for _, user := range usersToAdd.ToSlice() {
+		// Prepare patch entry to add a group member.
+		var patch gen.PatchRequest_Item
+
+		err := patch.FromJSONPatchRequestAdd(gen.JSONPatchRequestAdd{
+			Op:    gen.Add,
+			Path:  "/",
+			Value: user,
+		})
+		if err != nil {
+			return err
+		}
+
+		membersPatch = append(membersPatch, patch)
+	}
+
+	for _, user := range usersToDelete.ToSlice() {
+		// Prepare patch entry to delete a group member.
+		var patch gen.PatchRequest_Item
+
+		var u any = user
+		err := patch.FromJSONPatchRequestRemove(gen.JSONPatchRequestRemove{
+			Op:    gen.Remove,
+			Path:  "/",
+			Value: &u,
+		})
+		if err != nil {
+			return err
+		}
+
+		membersPatch = append(membersPatch, patch)
+	}
+
+	membersResp, err := c.ModifyUserGroupMembersWithResponse(ctx, c.Source, group, membersPatch)
+	if err != nil {
+		return err
+	}
+
+	if membersResp.StatusCode() != http.StatusNoContent {
+		return fmt.Errorf("could not update members of the group %s", group)
+	}
+
+	return nil
+}
+
+type SyncUserGroupPermissionsParams struct {
+	ConnID  string
+	Parents []string
+	Groups  []string
+}
+
 // SyncUserGroupPermissions synchronizes the permissions of user groups on a connection.
 // Furthermore synchronizes the permissions of user groups on all parent connection groups.
-func (c *Client) SyncUserGroupPermissions(ctx context.Context, groups []string, connID string, parents []string) error {
-	requestedGroups := set.FromSlice(groups)
+func (c *Client) SyncUserGroupPermissions(ctx context.Context, params SyncUserGroupPermissionsParams, filters ...Filter) error {
+	requestedGroups := set.FromSlice(params.Groups)
 
-	connGroups, err := c.getConnectionGroups(ctx, connID)
+	connGroups, err := c.getConnectionGroups(ctx, params.ConnID, filters...)
 	if err != nil {
 		return err
 	}
@@ -248,12 +351,12 @@ func (c *Client) SyncUserGroupPermissions(ctx context.Context, groups []string, 
 	currentGroups := set.FromSlice(connGroups)
 
 	groupsToAdd := set.Difference(requestedGroups, currentGroups)
-	if err := c.addConnectionGroups(ctx, connID, parents, groupsToAdd.ToSlice()); err != nil {
+	if err := c.addConnectionGroups(ctx, params.ConnID, params.Parents, groupsToAdd.ToSlice()); err != nil {
 		return err
 	}
 
 	groupsToDelete := set.Difference(currentGroups, requestedGroups)
-	if err := c.deleteConnectionGroups(ctx, connID, groupsToDelete.ToSlice()); err != nil {
+	if err := c.deleteConnectionGroups(ctx, params.ConnID, groupsToDelete.ToSlice()); err != nil {
 		return err
 	}
 
@@ -292,8 +395,48 @@ func (c *Client) SyncUserPermissions(ctx context.Context, params SyncUserPermiss
 	return nil
 }
 
+// RemoveUserGroup removes user group.
+func (c Client) RemoveUserGroup(ctx context.Context, name string) error {
+	response, err := c.DeleteUserGroup(ctx, c.Source, name)
+	if err != nil {
+		return err
+	}
+
+	// Assumption that resource is already deleted.
+	if response.StatusCode == http.StatusNotFound {
+		return nil
+	}
+
+	if response.StatusCode != http.StatusNoContent {
+		return errors.New("could not delete user group")
+	}
+
+	return nil
+}
+
+// RemoveConnection removes connection.
+func (c Client) RemoveConnection(ctx context.Context, connectionID string) error {
+	response, err := c.DeleteConnectionWithResponse(ctx, c.Source, connectionID)
+	if err != nil {
+		return err
+	}
+
+	// Assumption that resource is already deleted.
+	if response.StatusCode() == http.StatusNotFound {
+		return nil
+	}
+
+	if response.StatusCode() != http.StatusNoContent {
+		return errors.New("could not delete connection")
+	}
+
+	return nil
+}
+
+type Filter func(gen.UserGroups) gen.UserGroups
+
 // getConnectionGroups returns all groups with permissions on a connection.
-func (c *Client) getConnectionGroups(ctx context.Context, connID string) ([]string, error) {
+func (c *Client) getConnectionGroups(ctx context.Context, connID string, filters ...Filter) ([]string, error) {
 	groups := []string{}
 
 	// Query all groups and their permissions. API has no ability to just return
@@ -310,7 +453,13 @@ func (c *Client) getConnectionGroups(ctx context.Context, connID string) ([]stri
 		return groups, errors.New("could not query groups")
 	}
 
-	for group := range *response.JSON200 {
+	filteredGroups := *response.JSON200
+
+	for _, f := range filters {
+		filteredGroups = f(filteredGroups)
+	}
+
+	for group := range filteredGroups {
 		response, err := c.GetUserGroupPermissionsWithResponse(ctx, c.Source, group)
 		if err != nil {
 			return groups, err
