@@ -37,3 +37,7 @@ func (s *Set) Has(v string) bool {
 func (s *Set) ToSlice() []string {
 	return maps.Keys(s.set)
 }
+
+func (s *Set) Len() int {
+	return len(s.ToSlice())
+}
