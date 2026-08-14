@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -53,6 +54,18 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 		return err
 	}
 
+	// Normalize attributes.
+	if obj.Spec.Attributes == nil {
+		obj.Spec.Attributes = &v1alpha1.ConnectionAttributes{
+			RawMessage: []byte("{}"),
+		}
+	}
+
+	attributes := gen.ConnectionAttributes{}
+	if err := json.Unmarshal(obj.Spec.Attributes.RawMessage, &attributes); err != nil {
+		return err
+	}
+
 	// Resolve connection group.
 	parent, parents, err := r.client.ResolveConnectionGroup(ctx, *obj.Spec.Parent)
 	if err != nil {
@@ -81,7 +94,7 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 			Protocol:         obj.Spec.Protocol,
 			ParentIdentifier: parent,
 			Parameters:       params,
-			Attributes:       gen.ConnectionAttributes{},
+			Attributes:       attributes,
 		}
 
 		// Update connection. This can fail when a connection changes its parent
@@ -106,6 +119,7 @@ func (r *Reconciler) Sync(ctx context.Context, obj *v1alpha1.Connection) error {
 			Protocol:         obj.Spec.Protocol,
 			ParentIdentifier: parent,
 			Parameters:       params,
+			Attributes:       attributes,
 		}
 
 		response, err := r.client.CreateConnectionWithResponse(ctx, r.client.Source, request)

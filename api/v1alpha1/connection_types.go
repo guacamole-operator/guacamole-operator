@@ -47,6 +47,11 @@ type ConnectionSpec struct {
 	// +optional
 	Parameters *ConnectionParameters `json:"parameters,omitempty"`
 
+	// Attributes of the connection.
+	//
+	// +optional
+	Attributes *ConnectionAttributes `json:"attributes,omitempty"`
+
 	// Permissions.
 	//
 	// +optional
@@ -113,6 +118,14 @@ type ConnectionProtocol = gen.ConnectionProtocol
 
 // ConnectionParameters...
 type ConnectionParameters struct {
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:validation:Type=object
+	// +kubebuilder:pruning:PreserveUnknownFields
+	json.RawMessage `json:",inline"`
+}
+
+// ConnectionAttributes...
+type ConnectionAttributes struct {
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:validation:Type=object
 	// +kubebuilder:pruning:PreserveUnknownFields

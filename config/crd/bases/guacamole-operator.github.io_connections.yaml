@@ -43,6 +43,10 @@ spec:
           spec:
             description: ConnectionSpec defines the desired state of Connection.
             properties:
+              attributes:
+                description: Attributes of the connection.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
               guacamoleRef:
                 description: GuacamoleRef references the instance this connection
                   belongs to.
